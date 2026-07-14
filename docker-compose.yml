@@ -1,0 +1,129 @@
+# AD-75: rotate log cho MỌI service — trên Linux cài bằng install.sh, Docker
+# mặc định KHÔNG rotate json-file → log phình vô hạn. (OrbStack trên Mac dev
+# có default riêng nhưng khai tường minh vẫn đúng.)
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    # Tuned for ~500 concurrent candidates on the Mac Mini M4 (24GB RAM).
+    command:
+      - postgres
+      - -c
+      - max_connections=600
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=3GB
+      - -c
+      - work_mem=8MB
+      - -c
+      - max_wal_size=2GB
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    logging: *default-logging
+    # Nhiều worker để dùng nhiều nhân CPU (M4 10 nhân). 1 worker (--reload, mặc định
+    # trong Dockerfile) nghẽn 1 nhân khi đông thí sinh polling (AD-69).
+    # AD-75: 6 worker × pool (15+10) = tối đa 150 kết nối < max_connections 600 —
+    # đổi số worker thì tính lại cùng database.py. Tác vụ tự-nộp dùng khoá Redis nên
+    # an toàn nhiều worker. (Bỏ --reload: đổi code backend giờ cần restart thủ công.)
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "6", "--timeout-keep-alive", "65", "--no-access-log"]
+    env_file: .env
+    volumes:
+      - ./backend:/app
+      # (AD-75: đã bỏ bind mount /Volumes — di sản USB-scan gỡ từ AD-27; giữ lại
+      # làm `docker compose up` FAIL trên Linux vì /Volumes không tồn tại.)
+    ports:
+      - "127.0.0.1:8000:8000"   # dev convenience; production traffic goes through Caddy
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend-admin:
+    build: ./frontend-admin
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - ./frontend-admin:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+  frontend-exam:
+    # Served as a PRODUCTION build (not the Vite dev server): exam machines run
+    # Safe Exam Browser 2.4.1 on Windows 7 (Gecko 41), which can't run dev-mode
+    # native ESM. No source bind-mount here — the image's built dist/ is served,
+    # so rebuild the image (docker compose build frontend-exam) after FE changes.
+    build: ./frontend-exam
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./backend/uploads:/srv/uploads:ro
+      - ./kiosk-release:/srv/kiosk-release:ro
+      - ./caddy_data:/data
+      - ./caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend-admin:
+        condition: service_healthy
+      frontend-exam:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 40s
+
+volumes:
+  pgdata:
+  redisdata:

@@ -1,0 +1,12 @@
+{
+  "_help": "Copy file này thành 'kiosk.config.json' đặt cạnh file cài kiosk để đè mặc định.",
+  "serverIp": "",
+  "_serverIp": "IP (hoặc host:port) TĨNH của server thi, vd '192.168.1.10'. Đặt để kiosk kết nối THẲNG, không cần mDNS. Để trống thì chỉ dùng mDNS exam-server.local.",
+  "serverHost": "exam-server",
+  "_serverHost": "Tên mDNS server quảng bá (→ exam-server.local). Đổi nếu server dùng tên khác.",
+  "emergencyPassword": "ump@2026",
+  "_emergencyPassword": "Mật khẩu thoát KHẨN CẤP (Ctrl+Alt+Shift+Q). ĐỔI trước khi phát cho máy thi.",
+  "controlPollMs": 5000,
+  "_controlPollMs": "Nhịp poll lệnh 'Thoát tất cả máy thi' từ server (ms). Kẹp trong [2000..60000].",
+  "discoveryTimeoutMs": 5000
+}

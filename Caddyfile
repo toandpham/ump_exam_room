@@ -1,0 +1,86 @@
+# Caddy reverse proxy for the exam system.
+# Serves both plain HTTP (:80, for IP access) and HTTPS with a self-signed
+# internal CA (for the mDNS hostname exam-server.local / localhost). Fully offline
+# — no ACME/Let's Encrypt.
+
+{
+	admin off
+	# Keep internal TLS but don't force HTTP->HTTPS redirects, so :80 still serves.
+	auto_https disable_redirects
+}
+
+(routes) {
+	# Baseline security headers (offline LAN; no HSTS so plain :80 keeps working).
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	# route{} preserves written order so the role-login redirects win over the
+	# /admin* proxy for the exact /admin path.
+	route {
+		# Backend API + WebSocket (Caddy auto-handles WS upgrades).
+		# Caddy proactively closes idle upstream connections after 30s — well before
+		# uvicorn's 65s keep-alive timeout — so Caddy never reuses a connection that
+		# uvicorn has already closed (which surfaced as random 502 "EOF" on the first
+		# request after an idle period, e.g. the first admin login).
+		reverse_proxy /api/* backend:8000 {
+			transport http {
+				keepalive 30s
+			}
+			# SEB hashes the absolute request URL into X-SafeExamBrowser-ConfigKeyHash;
+			# the backend must rebuild that exact URL, so forward original host/scheme.
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+		reverse_proxy /ws/* backend:8000
+
+		# Static uploads (candidate + question images) served from the volume.
+		handle_path /uploads/* {
+			root * /srv/uploads
+			file_server
+		}
+
+		# Kiosk self-update (AD-84): phát latest.json + file cài .exe cho máy thi
+		# tự cập nhật khi khởi động. Tĩnh, KHÔNG dính license gate (không qua /api).
+		handle_path /kiosk/* {
+			root * /srv/kiosk-release
+			file_server
+		}
+
+		# Per-role login links → admin SPA login screen with a ?role= hint
+		# (labels the screen + restricts which account role may sign in).
+		@chutich path /chutich /chutich/
+		redir @chutich /admin/login?role=chutich 302
+		@giamthi path /giamthi /giamthi/
+		redir @giamthi /admin/login?role=giamthi 302
+		@adminlogin path /admin
+		redir @adminlogin /admin/login?role=quantri 302
+		# Thí sinh login link → candidate SPA.
+		@thisinh path /thisinh
+		redir @thisinh /thisinh/ 302
+		# Retire the old /exam path → new /thisinh.
+		@oldexam path /exam /exam/*
+		redir @oldexam /thisinh/ 302
+
+		# Admin SPA (Vite base /admin/) and candidate SPA (Vite base /thisinh/).
+		reverse_proxy /admin* frontend-admin:5173
+		reverse_proxy /thisinh* frontend-exam:5173
+
+		# Landing: send root to the admin app.
+		redir / /admin/ 302
+	}
+}
+
+# HTTP on :80 — access by LAN IP (e.g. http://192.168.1.50).
+:80 {
+	import routes
+}
+
+# HTTPS with self-signed internal cert — access by hostname.
+exam-server.local, localhost {
+	tls internal
+	import routes
+}

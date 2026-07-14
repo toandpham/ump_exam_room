@@ -1,0 +1,17 @@
+Windows Registry Editor Version 5.00
+
+; HOÀN TÁC: trả màn Ctrl+Alt+Del về mặc định Windows (chạy bằng quyền Administrator).
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\System]
+"DisableTaskMgr"=-
+"DisableLockWorkstation"=-
+"DisableChangePassword"=-
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer]
+"NoLogoff"=-
+"StartMenuLogOff"=-
+"NoClose"=-
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System]
+"shutdownwithoutlogon"=dword:00000001
+"HideFastUserSwitching"=-

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>Kỳ thi</title>
+  <style>
+    html,body{height:100%;margin:0;font-family:Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0}
+    .wrap{height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:18px}
+    .spin{width:46px;height:46px;border:5px solid #334155;border-top-color:#38bdf8;border-radius:50%;animation:s 1s linear infinite}
+    @keyframes s{to{transform:rotate(360deg)}}
+    .hide{display:none}
+    .card{background:#1e293b;padding:24px 28px;border-radius:12px;min-width:320px;text-align:center}
+    input{font-size:18px;padding:8px 10px;border-radius:8px;border:1px solid #475569;background:#0f172a;color:#e2e8f0;width:100%;box-sizing:border-box}
+    button{margin-top:12px;font-size:16px;padding:8px 16px;border:0;border-radius:8px;background:#38bdf8;color:#08233a;font-weight:600;cursor:pointer}
+    .err{color:#fca5a5;margin-top:8px;min-height:20px}
+    h2{margin:0 0 6px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="searching">
+      <div class="spin"></div>
+      <p>Đang tìm máy chủ thi…</p>
+    </div>
+
+    <div id="manual" class="card hide">
+      <h2>Không tìm thấy máy chủ thi</h2>
+      <p>Nhập địa chỉ IP máy chủ (hỏi giám thị):</p>
+      <input id="ip" placeholder="192.168.1.50" />
+      <div class="err" id="manualErr"></div>
+      <button id="connect">Kết nối</button>
+      <button id="retry" style="background:#475569;color:#e2e8f0">Tìm lại tự động</button>
+      <p style="color:#64748b;font-size:12px;margin-top:10px">Hệ thống tự tìm lại máy chủ mỗi 10 giây.</p>
+    </div>
+
+    <div id="updating" class="hide" style="text-align:center">
+      <div class="spin"></div>
+      <p style="margin-top:16px">Đang cập nhật phần mềm thi…</p>
+      <p id="updVer" style="color:#64748b;font-size:13px"></p>
+      <p style="color:#fca5a5;font-size:13px">Vui lòng KHÔNG tắt máy — sẽ tự khởi động lại.</p>
+    </div>
+  </div>
+  <!-- Số phiên bản để giám thị đối chiếu khi hỗ trợ (AD-76). -->
+  <div id="ver" style="position:fixed;bottom:8px;right:12px;color:#475569;font-size:11px"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const show = (id) => { ["searching","manual","updating"].forEach(x => $(x).classList.add("hide")); $(id).classList.remove("hide"); };
+
+    window.kiosk.onStatus((d) => {
+      if (d.phase === "searching") show("searching");
+      else if (d.phase === "manual") { show("manual"); if (d.error) $("manualErr").textContent = d.error; }
+      else if (d.phase === "updating") { show("updating"); if (d.version) $("updVer").textContent = "Phiên bản mới: v" + d.version; }
+    });
+    window.kiosk.onVersion((v) => { $("ver").textContent = "Exam Kiosk v" + v; });
+
+    $("connect").onclick = () => { const v = $("ip").value.trim(); if (v) window.kiosk.submitIp(v); };
+    $("retry").onclick = () => window.kiosk.retry();
+    $("ip").addEventListener("keydown", (e) => { if (e.key === "Enter") $("connect").click(); });
+  </script>
+</body>
+</html>

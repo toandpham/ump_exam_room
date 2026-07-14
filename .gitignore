@@ -1,0 +1,80 @@
+# Env / secrets
+.env
+.env.local
+*.exam
+
+# Công cụ NỘI BỘ nhà cung cấp — KHÔNG public (repo sẽ công khai). Chứa/liên quan
+# secret mã hoá đề (.qenc) + cấp license key. Chỉ lưu cục bộ trên máy nhà cung cấp.
+/qti-crypter/
+/license-console/
+/tools/license-keygen/
+
+# Nội bộ / lỗi thời — không đưa lên repo công khai (giữ cục bộ)
+/CLAUDE.md
+/EXAM_SYSTEM_PROMPT.md
+/docs/superpowers/
+/docs/seb-acceptance.md
+/kiosk-win7/
+/Phong_thi_truc_tuyen.pptx
+/Phong_thi_truc_tuyen_tomtat.pptx
+
+# Local SEB config files (contain password hashes) + local test data
+*.seb
+danh_sach_thi_sinh_test.xlsx
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+*.log
+npm-debug.log*
+
+# Uploads (keep folders, ignore content)
+backend/uploads/candidates/*
+backend/uploads/questions/*
+!backend/uploads/candidates/.gitkeep
+!backend/uploads/questions/.gitkeep
+backend/uploads/sitting_*/
+
+# Caddy runtime data
+caddy_data/*
+caddy_config/*
+!caddy_data/.gitkeep
+!caddy_config/.gitkeep
+
+# Backups
+backups/
+
+# Sample exam packages + real exam banks (customer content WITH answer keys —
+# MUST stay out of git)
+Cholimex_qti30/
+Jun_qti30/
+*_qti30/
+sample_data/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# LaunchAgent logs
+logs/
+
+# Playwright MCP artifacts (browser E2E sessions)
+.playwright-mcp/
+
+# Script lỗi thời (sinh slide cũ / SEB đã bỏ) — giữ cục bộ
+/scripts/make_deck*.py
+/scripts/make_seb*.sh

@@ -1,0 +1,52 @@
+{
+  "name": "exam-kiosk",
+  "version": "1.2.0",
+  "description": "Trình duyệt thi khoá màn hình cho Windows 7→11 — AD-66/76",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test 'test/*.test.js'",
+    "dist": "electron-builder --win nsis --ia32",
+    "dist:dir": "electron-builder --win dir --ia32"
+  },
+  "author": "",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "multicast-dns": "^7.2.5"
+  },
+  "devDependencies": {
+    "electron": "22.3.27",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "vn.ump.examkiosk",
+    "productName": "UMP_ExamKiosk",
+    "artifactName": "${productName}.${ext}",
+    "files": [
+      "src/**/*"
+    ],
+    "extraResources": [
+      { "from": "resources/keyblocker.exe", "to": "keyblocker.exe" }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "requestedExecutionLevel": "requireAdministrator",
+      "target": [
+        { "target": "nsis", "arch": ["ia32"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": false,
+      "runAfterFinish": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "UMP ExamKiosk",
+      "artifactName": "${productName}-Setup.${ext}"
+    }
+  },
+  "allowScripts": {
+    "electron@22.3.27": true
+  }
+}

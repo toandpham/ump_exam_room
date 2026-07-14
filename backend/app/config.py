@@ -1,0 +1,72 @@
+"""Application configuration loaded from environment variables."""
+
+from __future__ import annotations
+
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Typed settings sourced from environment (see .env.example)."""
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
+
+    # Runtime
+    environment: str = "development"
+    log_level: str = "INFO"
+
+    # Database
+    database_url: str = "postgresql+asyncpg://exam:change_me_postgres@postgres:5432/exam_db"
+
+    # Redis
+    redis_url: str = "redis://redis:6379/0"
+
+    # Security
+    jwt_secret: str = "change_me_to_a_long_random_secret"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_hours: int = 8
+    bcrypt_rounds: int = 12
+
+    # Encryption
+    pbkdf2_iterations: int = 600_000
+
+    # Uploads
+    upload_dir: str = "/app/uploads"
+    max_upload_mb: int = 20
+
+    # Safe Exam Browser (AD-56). seb_enforce=False only in tests/dev without SEB.
+    seb_start_url: str = "http://exam-server.local/thisinh/"
+    seb_enforce: bool = True
+    # Config Key from the SEB Config Tool (preferred — version-proof). When set,
+    # it overrides the value computed from our settings template (see AD-57).
+    seb_config_key: str = ""
+
+    # Secret giải mã đề .qenc (base64 32 byte) — BẮT BUỘC đặt để nạp được đề mã hoá.
+    # Phải khớp giá trị nhà cung cấp dùng trong phần mềm mã hoá đề. Không đặt → không
+    # giải mã được (báo lỗi rõ). Là khoá triển khai, KHÔNG nhúng trong mã nguồn.
+    qti_secret: str = ""
+
+    # Rate limiting — throttle password brute-force on the admin login.
+    admin_login_rate: str = "10/2minutes"
+    exam_login_rate: str = "10/2minutes"
+
+    # CORS
+    cors_origins: str = "http://localhost,http://exam-server.local"
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.lower() == "production"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """Cached settings singleton."""
+    return Settings()
+
+
+settings = get_settings()

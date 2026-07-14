@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>Thoát khẩn cấp</title>
+  <style>
+    html,body{height:100%;margin:0;font-family:Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0}
+    .wrap{height:100%;display:flex;align-items:center;justify-content:center}
+    .card{background:#1e293b;padding:22px 26px;border-radius:12px;min-width:300px;text-align:center;box-sizing:border-box;width:100%}
+    h2{margin:0 0 6px;font-size:18px}
+    p{margin:0 0 12px;font-size:13px;color:#94a3b8}
+    input{font-size:18px;padding:8px 10px;border-radius:8px;border:1px solid #475569;background:#0f172a;color:#e2e8f0;width:100%;box-sizing:border-box}
+    .row{display:flex;gap:10px;margin-top:12px}
+    button{flex:1;font-size:15px;padding:8px 12px;border:0;border-radius:8px;cursor:pointer}
+    .ok{background:#38bdf8;color:#08233a;font-weight:600}
+    .cancel{background:#475569;color:#e2e8f0}
+    .err{color:#fca5a5;margin-top:8px;min-height:18px;font-size:13px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h2>Thoát khẩn cấp</h2>
+      <p>Nhập mật khẩu giám thị/kỹ thuật để thoát:</p>
+      <input id="pw" type="password" autofocus />
+      <div class="err" id="err"></div>
+      <div class="row">
+        <button class="ok" id="ok">Thoát</button>
+        <button class="cancel" id="cancel">Huỷ</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    async function submit() {
+      const ok = await window.emergency.verify($("pw").value);
+      if (!ok) { $("err").textContent = "Mật khẩu không đúng."; $("pw").value = ""; $("pw").focus(); }
+      // Nếu đúng: main process tự đóng app — không cần làm gì thêm.
+    }
+    $("ok").onclick = submit;
+    $("cancel").onclick = () => window.emergency.cancel();
+    $("pw").addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+    $("pw").focus();
+  </script>
+</body>
+</html>
