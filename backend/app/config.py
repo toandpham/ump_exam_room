@@ -35,9 +35,10 @@ class Settings(BaseSettings):
     upload_dir: str = "/app/uploads"
     max_upload_mb: int = 20
 
-    # Safe Exam Browser (AD-56). seb_enforce=False only in tests/dev without SEB.
+    # Safe Exam Browser — MẶC ĐỊNH TẮT (hệ thống dùng kiosk riêng, không dùng SEB).
+    # Chỉ bật (SEB_ENFORCE=true trong .env) nếu thật sự dùng Safe Exam Browser.
     seb_start_url: str = "http://exam-server.local/thisinh/"
-    seb_enforce: bool = True
+    seb_enforce: bool = False
     # Config Key from the SEB Config Tool (preferred — version-proof). When set,
     # it overrides the value computed from our settings template (see AD-57).
     seb_config_key: str = ""
