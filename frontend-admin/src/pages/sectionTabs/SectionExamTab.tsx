@@ -14,7 +14,7 @@ export default function SectionExamTab() {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
@@ -26,7 +26,7 @@ export default function SectionExamTab() {
   const importMut = useMutation({
     mutationFn: async () => {
       setPhase("uploading"); setProgress(0); setError("");
-      return sittingsApi.importQti(sittingId, file!, code, (p) => setProgress(p));
+      return sittingsApi.importQti(sittingId, file!, password, (p) => setProgress(p));
     },
     onSuccess: () => {
       setPhase("done");
@@ -50,7 +50,7 @@ export default function SectionExamTab() {
     setFile(f); setError(""); setPhase("idle");
   }
   function clear() {
-    setFile(null); setCode(""); setPhase("idle"); setProgress(0); setError("");
+    setFile(null); setPassword(""); setPhase("idle"); setProgress(0); setError("");
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -126,14 +126,15 @@ export default function SectionExamTab() {
 
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">
-              Mã kích hoạt (8 số)
+              Mật khẩu mở đề
             </label>
-            <input inputMode="numeric" value={code} maxLength={8}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+            <input value={password}
+              onChange={(e) => setPassword(e.target.value.toUpperCase())}
               disabled={phase === "uploading" || isRunning}
-              className="input font-mono tracking-widest" placeholder="12345678" />
+              className="input font-mono tracking-widest uppercase" placeholder="ACDE-FGHJ-KMNP-QRTU" />
             <p className="text-[11px] text-slate-500 mt-1">
-              Xem trên phần mềm <b>Mã hoá đề thi</b> (máy người ra đề) — mã đổi mỗi 30 phút.
+              Gọi <b>người ra đề</b> để đọc mật khẩu của file này. Mỗi file một mật khẩu riêng;
+              file chỉ dùng được trong <b>1 ngày</b> kể từ lúc mã hoá.
             </p>
           </div>
 
@@ -152,7 +153,7 @@ export default function SectionExamTab() {
 
           <button
             onClick={() => importMut.mutate()}
-            disabled={!file || code.length !== 8 || phase === "uploading" || isRunning}
+            disabled={!file || password.trim().length < 8 || phase === "uploading" || isRunning}
             className="w-full px-5 py-2.5 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
           >
             {phase === "uploading" ? (

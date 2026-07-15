@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from app.database import AsyncSessionLocal
 from app.models import Sitting
-from tests.conftest import auth, fast_forward_start, qenc, qenc_code
+from tests.conftest import auth, fast_forward_start, qenc, QENC_PASSWORD
 
 MANIFEST = """<?xml version="1.0"?>
 <manifest xmlns="http://www.imsglobal.org/xsd/imscp_v1p1">
@@ -72,7 +72,7 @@ async def test_qti_import_then_full_candidate_flow(client, factory):
     r = await client.post(
         f"/api/admin/sittings/{sitting.id}/import-qti",
         files={"file": ("exam.qenc", qenc(_build_qti_zip()), "application/octet-stream")},
-        data={"code": qenc_code()},
+        data={"password": QENC_PASSWORD},
         headers=auth(ptok),
     )
     assert r.status_code == 200, r.text
@@ -127,7 +127,7 @@ async def test_import_forces_shuffle_on(client, factory):
     r = await client.post(
         f"/api/admin/sittings/{sitting.id}/import-qti",
         files={"file": ("exam.qenc", qenc(_build_qti_zip()), "application/octet-stream")},
-        data={"code": qenc_code()}, headers=auth(ptok),
+        data={"password": QENC_PASSWORD}, headers=auth(ptok),
     )
     assert r.status_code == 200, r.text
     async with AsyncSessionLocal() as db:
@@ -142,7 +142,7 @@ async def test_bulk_answers_then_score(client, factory):
     exam, sitting = await factory.empty_active_exam(admin.id)
     await client.post(f"/api/admin/sittings/{sitting.id}/import-qti",
                       files={"file": ("exam.qenc", qenc(_build_qti_zip()), "application/octet-stream")},
-                      data={"code": qenc_code()}, headers=auth(ptok))
+                      data={"password": QENC_PASSWORD}, headers=auth(ptok))
     await client.post(f"/api/admin/sittings/{sitting.id}/open", headers=auth(ptok))
     cand = await factory.candidate(exam.id)
     tok = (await client.post("/api/exam/auth/login", json={"cccd": cand.cccd})).json()["token"]
@@ -168,32 +168,11 @@ async def test_import_qti_rejects_plain_zip(client, factory):
     r = await client.post(
         f"/api/admin/sittings/{sitting.id}/import-qti",
         files={"file": ("exam.zip", _build_qti_zip(), "application/zip")},
-        data={"code": qenc_code()},
+        data={"password": QENC_PASSWORD},
         headers=auth(ptok),
     )
     assert r.status_code == 400
     assert "mã hoá" in r.json()["detail"].lower()
-
-
-async def test_import_qti_missing_secret_gives_clear_400(client, factory, monkeypatch):
-    """Máy chủ chưa cấu hình QTI_SECRET (.env rỗng — bản cài mới) → 400 báo rõ,
-    KHÔNG được lọt thành 500 mù. verify_code() gọi get_secret() nên phải bắt QencError
-    cả ở bước kiểm mã, không chỉ ở bước giải mã (sự cố thực địa 15-07)."""
-    from app.config import settings as _s
-
-    admin, ptok = await factory.admin()
-    exam, sitting = await factory.empty_active_exam(admin.id)
-    body = qenc(_build_qti_zip())
-    code = qenc_code()
-    monkeypatch.setattr(_s, "qti_secret", "")   # giả lập .env chưa điền secret
-    r = await client.post(
-        f"/api/admin/sittings/{sitting.id}/import-qti",
-        files={"file": ("exam.qenc", body, "application/octet-stream")},
-        data={"code": code},
-        headers=auth(ptok),
-    )
-    assert r.status_code == 400, f"phải 400 chứ không 500, got {r.status_code}"
-    assert "QTI_SECRET" in r.json()["detail"]
 
 
 async def test_import_qti_rejects_garbage_file(client, factory):
@@ -202,24 +181,44 @@ async def test_import_qti_rejects_garbage_file(client, factory):
     r = await client.post(
         f"/api/admin/sittings/{sitting.id}/import-qti",
         files={"file": ("notes.txt", b"hello", "text/plain")},
-        data={"code": qenc_code()},
+        data={"password": QENC_PASSWORD},
         headers=auth(ptok),
     )
     assert r.status_code == 400
 
 
-async def test_import_qti_rejects_wrong_code(client, factory):
-    """Mã kích hoạt sai/hết hạn → 400, KHÔNG giải mã file."""
+async def test_import_qti_rejects_wrong_password(client, factory):
+    """CHỐT BẢO MẬT: sai mật khẩu đề → 400, KHÔNG giải mã được file.
+
+    Khoá hệ thống nhúng sẵn (công khai) MỘT MÌNH không mở được gì — mật khẩu nằm
+    thẳng trong khoá AES nên không có 'cửa kiểm tra' nào để lách."""
     admin, ptok = await factory.admin()
     exam, sitting = await factory.empty_active_exam(admin.id)
     r = await client.post(
         f"/api/admin/sittings/{sitting.id}/import-qti",
         files={"file": ("exam.qenc", qenc(_build_qti_zip()), "application/octet-stream")},
-        data={"code": "00000000"},
+        data={"password": "WRON-GPAS-SWOR-D999"},
         headers=auth(ptok),
     )
     assert r.status_code == 400
-    assert "kích hoạt" in r.json()["detail"].lower()
+    assert "mật khẩu" in r.json()["detail"].lower()
+
+
+async def test_import_qti_rejects_expired_file(client, factory):
+    """File đề quá hạn 1 ngày → 400, đề nghị mã hoá lại."""
+    from app.core import qti_crypt
+
+    admin, ptok = await factory.admin()
+    exam, sitting = await factory.empty_active_exam(admin.id)
+    stale = qti_crypt.encrypt_qenc(_build_qti_zip(), QENC_PASSWORD, ttl=-10)  # đã hết hạn
+    r = await client.post(
+        f"/api/admin/sittings/{sitting.id}/import-qti",
+        files={"file": ("exam.qenc", stale, "application/octet-stream")},
+        data={"password": QENC_PASSWORD},
+        headers=auth(ptok),
+    )
+    assert r.status_code == 400
+    assert "quá hạn" in r.json()["detail"].lower()
 
 
 async def test_import_qti_rejects_tampered_qenc(client, factory):
@@ -231,7 +230,7 @@ async def test_import_qti_rejects_tampered_qenc(client, factory):
     r = await client.post(
         f"/api/admin/sittings/{sitting.id}/import-qti",
         files={"file": ("exam.qenc", bytes(bad), "application/octet-stream")},
-        data={"code": qenc_code()},
+        data={"password": QENC_PASSWORD},
         headers=auth(ptok),
     )
     assert r.status_code == 400
@@ -250,7 +249,7 @@ async def test_import_qti_inner_zip_with_password_rejected(client, factory):
     r = await client.post(
         f"/api/admin/sittings/{sitting.id}/import-qti",
         files={"file": ("exam.qenc", qenc(buf.getvalue()), "application/octet-stream")},
-        data={"code": qenc_code()},
+        data={"password": QENC_PASSWORD},
         headers=auth(ptok),
     )
     assert r.status_code == 400

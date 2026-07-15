@@ -38,12 +38,12 @@ export const sittingsApi = {
   // The ONLY đề-load path: upload gói QTI đã mã hoá (.qenc, tool "Mã hoá đề thi")
   // kèm mã kích hoạt 8 số (đổi mỗi 30 phút — spec 2026-07-13).
   importQti: async (
-    id: string, file: File, code: string,
+    id: string, file: File, password: string,
     onProgress?: (pct: number) => void,
   ): Promise<Sitting> => {
     const fd = new FormData();
     fd.append("file", file);
-    fd.append("code", code);
+    fd.append("password", password);
     return (await api.post(`/admin/sittings/${id}/import-qti`, fd, {
       onUploadProgress: (e) => {
         if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total));

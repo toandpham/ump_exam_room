@@ -257,18 +257,13 @@ def auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def qenc(zip_bytes: bytes) -> bytes:
-    """Bọc ZIP QTI thành .qenc như tool qti-crypter (spec 2026-07-13)."""
-    from app.core import qti_crypt
-    return qti_crypt.encrypt_qenc(zip_bytes)
+QENC_PASSWORD = "ACDE-FGHJ-KMNP-QRTU"   # mật khẩu đề dùng trong test
 
 
-def qenc_code() -> str:
-    """Mã kích hoạt TOTP hợp lệ tại thời điểm hiện tại (cho test import-qti)."""
-    from datetime import datetime, timezone
+def qenc(zip_bytes: bytes, password: str = QENC_PASSWORD) -> bytes:
+    """Bọc ZIP QTI thành .qenc như phần mềm Mã hoá đề thi (2 khoá: hệ thống + mật khẩu)."""
     from app.core import qti_crypt
-    counter = int(datetime.now(timezone.utc).timestamp()) // qti_crypt.TOTP_STEP
-    return qti_crypt._totp_at(counter, qti_crypt.get_secret())
+    return qti_crypt.encrypt_qenc(zip_bytes, password)
 
 
 async def fast_forward_start(sitting_id) -> None:

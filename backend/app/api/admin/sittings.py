@@ -218,7 +218,7 @@ async def delete_sitting(
 async def import_qti_into_sitting(
     sitting_id: uuid.UUID,
     file: UploadFile = File(..., description="Gói QTI 3.0 đã mã hoá (.qenc)"),
-    code: str = Form(..., description="Mã kích hoạt 8 số từ phần mềm Mã hoá đề thi"),
+    password: str = Form(..., description="Mật khẩu mở đề (người ra đề đọc lúc nạp)"),
     db: AsyncSession = Depends(get_db),
     admin: Admin = Depends(_require_proctor),
 ) -> SittingOut:
@@ -247,12 +247,11 @@ async def import_qti_into_sitting(
             "Đề phải được mã hoá bằng phần mềm Mã hoá đề thi (file .qenc) — "
             "không nhận ZIP thường.",
         )
-    # verify_code + decrypt cùng cần QTI_SECRET; nếu máy chủ chưa cấu hình thì
-    # get_secret() ném QencError — phải bắt CẢ ở verify_code, không thì lọt ra 500 mù.
+    # Hai khoá: khoá hệ thống nhúng sẵn + mật khẩu đề do người ra đề đọc. Sai/thiếu
+    # mật khẩu → GCM không mở được → QencError → 400 (không có "cửa kiểm tra" nào để
+    # bypass: mật khẩu nằm THẲNG trong khoá giải mã).
     try:
-        if not qti_crypt.verify_code(code):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Mã kích hoạt sai hoặc đã hết hạn.")
-        zip_bytes = qti_crypt.decrypt_qenc(raw)
+        zip_bytes = qti_crypt.decrypt_qenc(raw, password)
     except qti_crypt.QencError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 

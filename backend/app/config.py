@@ -43,10 +43,6 @@ class Settings(BaseSettings):
     # it overrides the value computed from our settings template (see AD-57).
     seb_config_key: str = ""
 
-    # Secret giải mã đề .qenc (base64 32 byte) — BẮT BUỘC đặt để nạp được đề mã hoá.
-    # Phải khớp giá trị nhà cung cấp dùng trong phần mềm mã hoá đề. Không đặt → không
-    # giải mã được (báo lỗi rõ). Là khoá triển khai, KHÔNG nhúng trong mã nguồn.
-    qti_secret: str = ""
 
     # Rate limiting — throttle password brute-force on the admin login.
     admin_login_rate: str = "10/2minutes"

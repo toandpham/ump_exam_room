@@ -26,7 +26,7 @@ from app.bootstrap import ensure_room_proctors, room_proctor_username
 from app.database import AsyncSessionLocal
 from app.models import Admin, Answer, Candidate, Exam, ExamSession, Room, Sitting
 from app.models.enums import AdminRole, ExamStatus
-from tests.conftest import auth, fast_forward_start, qenc, qenc_code
+from tests.conftest import auth, fast_forward_start, qenc, QENC_PASSWORD
 from tests.test_qti_import import _build_qti_zip
 
 
@@ -134,7 +134,7 @@ async def test_full_council_workflow(client, factory):
         iq = await client.post(
             f"/api/admin/sittings/{sitting_id}/import-qti",
             files={"file": ("exam.qenc", qenc(_build_qti_zip()), "application/octet-stream")},
-            data={"code": qenc_code()}, headers=auth(ctok))
+            data={"password": QENC_PASSWORD}, headers=auth(ctok))
         assert iq.status_code == 200 and iq.json()["question_count"] == 2, iq.text
         op = await client.post(f"/api/admin/sittings/{sitting_id}/open", headers=auth(ctok))
         assert op.status_code == 200 and op.json()["status"] == "active", op.text

@@ -1,101 +1,122 @@
-"""Giải mã đề QTI đã mã hoá (.qenc) + kiểm mã kích hoạt TOTP.
+"""Giải mã đề QTI đã mã hoá (.qenc) — mô hình HAI KHOÁ.
 
-File .qenc do tool Windows ``qti-crypter/`` sinh ra (spec 2026-07-13):
+File .qenc do phần mềm "Mã hoá đề thi" (chạy tại chỗ người ra đề) sinh ra:
 
-    bytes 0-4   magic  b"QENC1"
-    bytes 5-20  salt   16 byte ngẫu nhiên
-    bytes 21-32 nonce  12 byte ngẫu nhiên
-    bytes 33-   ciphertext || GCM tag 16 byte
+    bytes 0-4    magic  b"QENC2"
+    bytes 5-12   exp    hạn dùng (uint64 big-endian, unix giây) — dùng làm AAD
+    bytes 13-28  salt   16 byte ngẫu nhiên
+    bytes 29-40  nonce  12 byte ngẫu nhiên
+    bytes 41-    ciphertext || GCM tag 16 byte
 
-key = PBKDF2-HMAC-SHA256(secret, salt, 600k, 32) — chuẩn mật mã AD-11.
-Mã kích hoạt = TOTP RFC 6238 (HMAC-SHA1, 8 số, bước 1800s = 30 phút), server
-chấp nhận lệch ±1 bước để bù drift đồng hồ máy người ra đề.
+**Hai khoá, thiếu một là không mở được:**
 
-Secret 32 byte NHÚNG SẴN trong cả tool lẫn server (quyết định user: mặc định,
-không cần cài đặt); lưu dạng 2 dãy XOR để không grep ra trực tiếp. Có thể
-override qua env ``QTI_SECRET`` (base64) nếu sau này cần rotate không rebuild.
-Fixture ``tests/fixtures/sample.qenc`` sinh từ code Node đảm bảo 2 bên khớp.
+1. *Khoá hệ thống* (``SYSTEM_KEY``) — hằng số NHÚNG SẴN trong cả phần mềm mã hoá
+   lẫn server này, dùng vĩnh viễn. **Công khai cũng không sao**: một mình nó KHÔNG
+   mở được file nào, nên không cần giấu, không cần cấu hình ``.env``.
+2. *Mật khẩu đề* — ngẫu nhiên cho TỪNG file, chỉ người ra đề giữ, đọc cho hội đồng
+   lúc nạp đề. Không lưu ở server nơi thi.
+
+    khoá AES = PBKDF2-HMAC-SHA256(SYSTEM_KEY || mật_khẩu, salt, 600k, 32)
+
+Nhờ vậy: nhặt được file đề mà không có mật khẩu → chịu; có mật khẩu nhưng file
+chưa tới giờ được đọc → cũng chịu. Người ra đề kiểm soát THỜI ĐIỂM mở đề bằng
+việc đọc mật khẩu ra hay chưa.
+
+HẠN DÙNG (1 ngày): file mang sẵn mốc ``exp``; quá hạn thì server TỪ CHỐI nạp. Mốc
+này nằm trong AAD của GCM nên sửa là file hỏng. Đây là **chốt chặn phía phần mềm**,
+KHÔNG phải khoá tự huỷ: ai cầm cả file lẫn mật khẩu vẫn giải offline được (khoá hệ
+thống là công khai). Giá trị của nó là buộc mã hoá đề sát ngày thi — file cũ để lâu
+thì không nạp lên được nữa, thu hẹp cửa sổ rủi ro.
+
+LƯU Ý MẬT MÃ: khoá của một file offline không thể "tự hết hạn" thật sự — ai có mật
+khẩu thì mở được file ĐÓ mãi mãi. Kiểm soát thật nằm ở chỗ mật khẩu chỉ được đọc ra
+sát giờ thi, và mỗi đề một mật khẩu khác nhau (lộ đề này không ảnh hưởng đề khác).
+
+Định dạng cũ ``QENC1`` (một khoá) KHÔNG còn được chấp nhận — file cũ phải mã hoá lại.
 """
 
 from __future__ import annotations
 
 import base64
 import hashlib
-import hmac
 import os
+import re
 import struct
-from datetime import datetime, timezone
+import time
 
-from app.config import settings
-
-MAGIC = b"QENC1"
+MAGIC = b"QENC2"
 PBKDF2_ITERS = 600_000
-TOTP_STEP = 1800  # giây — mã đổi mỗi 30 phút (đổi từ 600s theo yêu cầu 13-07; PHẢI khớp tool)
-TOTP_DIGITS = 8
+# Hạn mặc định của file đề kể từ lúc mã hoá — PHẢI khớp qti-crypter/src/crypto.js.
+DEFAULT_TTL_SECONDS = 24 * 3600  # 1 ngày
+_HDR = 5 + 8 + 16 + 12  # magic + exp + salt + nonce
+
+# Khoá hệ thống — nhúng sẵn, dùng vĩnh viễn, CÔNG KHAI CŨNG KHÔNG SAO (một mình nó
+# không mở được gì). PHẢI khớp từng byte với qti-crypter/src/secret.js.
+SYSTEM_KEY_B64 = "Xwk1rUp4E3wemnXg7DiBGa+//I4bCADU5E+/uF70KD0="
+
 
 class QencError(Exception):
-    """File .qenc hỏng / sai định dạng / không giải mã được / thiếu khoá."""
+    """File .qenc hỏng / sai định dạng / sai mật khẩu."""
 
 
-def get_secret() -> bytes:
-    """Secret 32 byte cho mã hoá/giải mã đề .qenc — LẤY TỪ env ``QTI_SECRET`` (base64).
-
-    AD-86: KHÔNG nhúng secret trong mã nguồn (repo công khai sẽ lộ → ai cũng giải mã
-    được đề). Secret là khoá triển khai: nhà cung cấp đặt cùng giá trị vào ``.env`` của
-    máy chủ và vào phần mềm mã hoá đề (qti-crypter). Thiếu → báo lỗi rõ, không giải mã.
-    """
-    if not settings.qti_secret:
-        raise QencError(
-            "Máy chủ chưa cấu hình QTI_SECRET (.env) — không giải mã được đề .qenc. "
-            "Liên hệ nhà cung cấp để lấy khoá."
-        )
-    return base64.b64decode(settings.qti_secret)
+def system_key() -> bytes:
+    return base64.b64decode(SYSTEM_KEY_B64)
 
 
-def _totp_at(counter: int, secret: bytes) -> str:
-    msg = struct.pack(">Q", counter)
-    h = hmac.new(secret, msg, hashlib.sha1).digest()
-    o = h[-1] & 0x0F
-    code = (struct.unpack(">I", h[o:o + 4])[0] & 0x7FFFFFFF) % (10 ** TOTP_DIGITS)
-    return str(code).zfill(TOTP_DIGITS)
+def normalize_password(password: str) -> str:
+    """Chuẩn hoá mật khẩu người dùng gõ: HOA hoá, bỏ mọi ký tự không phải chữ/số
+    (dấu cách, gạch ngang khi đọc cho nhau). PHẢI khớp hàm cùng tên bên tool."""
+    return re.sub(r"[^A-Z0-9]", "", (password or "").upper())
 
 
-def verify_code(code: str, now: datetime | None = None) -> bool:
-    """Mã kích hoạt hợp lệ? Chấp nhận cửa sổ hiện tại ±1 bước (±30 phút)."""
-    code = (code or "").strip()
-    if len(code) != TOTP_DIGITS or not code.isdigit():
-        return False
-    ts = int((now or datetime.now(timezone.utc)).timestamp())
-    counter = ts // TOTP_STEP
-    secret = get_secret()
-    return any(
-        hmac.compare_digest(_totp_at(counter + d, secret), code) for d in (-1, 0, 1)
-    )
+def _derive_key(password: str, salt: bytes) -> bytes:
+    """Trộn HAI khoá: khoá hệ thống (nhúng) + mật khẩu đề (người ra đề đọc)."""
+    material = system_key() + normalize_password(password).encode("utf-8")
+    return hashlib.pbkdf2_hmac("sha256", material, salt, PBKDF2_ITERS, dklen=32)
 
 
 def is_qenc(data: bytes) -> bool:
     return data[:5] == MAGIC
 
 
-def decrypt_qenc(data: bytes) -> bytes:
-    """Giải mã .qenc → bytes ZIP QTI gốc. Raise QencError nếu hỏng/sai."""
+def expires_at(data: bytes) -> int:
+    """Mốc hết hạn (unix giây) ghi trong file."""
+    return struct.unpack(">Q", data[5:13])[0]
+
+
+def decrypt_qenc(data: bytes, password: str, now: int | None = None) -> bytes:
+    """Giải mã .qenc → bytes ZIP QTI gốc. Raise QencError nếu hỏng/sai mật khẩu/quá hạn."""
     from cryptography.exceptions import InvalidTag
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-    if len(data) < 5 + 16 + 12 + 16 or not is_qenc(data):
-        raise QencError("File không phải định dạng .qenc")
-    salt, nonce, ct_tag = data[5:21], data[21:33], data[33:]
-    key = hashlib.pbkdf2_hmac("sha256", get_secret(), salt, PBKDF2_ITERS, dklen=32)
+    if not normalize_password(password):
+        raise QencError("Chưa nhập mật khẩu mở đề (người ra đề cung cấp).")
+    if len(data) < _HDR + 16 or not is_qenc(data):
+        raise QencError(
+            "File không phải định dạng .qenc của phần mềm Mã hoá đề thi "
+            "(bản mới). File mã hoá bằng bản cũ phải mã hoá lại."
+        )
+    exp = expires_at(data)
+    now = int(time.time()) if now is None else now
+    if now > exp:
+        raise QencError(
+            "File đề đã QUÁ HẠN (mỗi file chỉ dùng trong 1 ngày kể từ lúc mã hoá). "
+            "Đề nghị người ra đề mã hoá lại và gửi file mới."
+        )
+    aad = data[5:13]   # mốc hạn được xác thực bởi GCM → sửa là hỏng file
+    salt, nonce, ct_tag = data[13:29], data[29:41], data[41:]
+    key = _derive_key(password, salt)
     try:
-        return AESGCM(key).decrypt(nonce, ct_tag, None)
+        return AESGCM(key).decrypt(nonce, ct_tag, aad)
     except InvalidTag:
-        raise QencError("File đề hỏng hoặc không đúng phần mềm mã hoá")
+        raise QencError("Mật khẩu mở đề không đúng (hoặc file đề đã hỏng).")
 
 
-def encrypt_qenc(zip_bytes: bytes) -> bytes:
-    """Đóng gói bytes → .qenc (chỉ dùng cho test/fixture — production dùng tool)."""
+def encrypt_qenc(zip_bytes: bytes, password: str, ttl: int = DEFAULT_TTL_SECONDS) -> bytes:
+    """Đóng gói bytes → .qenc (dùng cho test/fixture — thực tế dùng phần mềm mã hoá)."""
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+    exp = struct.pack(">Q", int(time.time()) + ttl)
     salt, nonce = os.urandom(16), os.urandom(12)
-    key = hashlib.pbkdf2_hmac("sha256", get_secret(), salt, PBKDF2_ITERS, dklen=32)
-    return MAGIC + salt + nonce + AESGCM(key).encrypt(nonce, zip_bytes, None)
+    key = _derive_key(password, salt)
+    return MAGIC + exp + salt + nonce + AESGCM(key).encrypt(nonce, zip_bytes, exp)

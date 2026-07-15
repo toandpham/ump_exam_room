@@ -5,7 +5,7 @@ import pytest
 from app.core.redis import redis_client
 from app.models.enums import AdminRole
 from app.services import session_service
-from tests.conftest import auth, qenc, qenc_code
+from tests.conftest import auth, qenc, QENC_PASSWORD
 from tests.test_qti_import import _build_qti_zip
 
 pytestmark = pytest.mark.asyncio
@@ -38,6 +38,6 @@ async def test_open_sitting_clears_wipe_flag(client, factory):
     # Nạp đề + mở buổi → cờ wipe phải bị xoá (đề mới không được wipe ngay).
     await client.post(f"/api/admin/sittings/{sitting.id}/import-qti",
                       files={"file": ("e.qenc", qenc(_build_qti_zip()), "application/octet-stream")},
-                      data={"code": qenc_code()}, headers=auth(ptok))
+                      data={"password": QENC_PASSWORD}, headers=auth(ptok))
     assert (await client.post(f"/api/admin/sittings/{sitting.id}/open", headers=auth(ptok))).status_code == 200
     assert await redis_client.get(session_service.kiosk_wipe_key(exam.id)) is None

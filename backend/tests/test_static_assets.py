@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from app.services import exam_assets
-from tests.conftest import auth, qenc, qenc_code
+from tests.conftest import auth, qenc, QENC_PASSWORD
 
 # 1x1 PNG hợp lệ (đủ để decode + ghi file).
 _PNG = base64.b64decode(
@@ -160,7 +160,7 @@ async def test_questions_serve_static_url_then_wiped(client, factory):
     r = await client.post(
         f"/api/admin/sittings/{sitting.id}/import-qti",
         files={"file": ("exam.qenc", qenc(_qti_zip_with_image()), "application/octet-stream")},
-        data={"code": qenc_code()}, headers=auth(ptok),
+        data={"password": QENC_PASSWORD}, headers=auth(ptok),
     )
     assert r.status_code == 200, r.text
     assert (await client.post(f"/api/admin/sittings/{sitting.id}/open", headers=auth(ptok))).status_code == 200
