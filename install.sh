@@ -128,6 +128,17 @@ else
   info "⚠️  Giấy phép: $1 — vào trang Giấy phép (tài khoản Quản trị) để nhập key gia hạn."
 fi
 
+# ── 6b. Khoá giải mã đề (.qenc) ──────────────────────────────────────────────
+# Không nhúng trong mã nguồn (repo công khai) → phải điền vào .env khi triển khai,
+# nếu không thì KHÔNG nạp được đề thi (báo lỗi rõ ở trang Nạp đề).
+if ! grep -qE '^QTI_SECRET=.+' .env 2>/dev/null; then
+  echo
+  echo "${BOLD}  ⚠️  CHƯA CÓ KHOÁ GIẢI MÃ ĐỀ (QTI_SECRET) — chưa nạp được đề thi.${RESET}"
+  echo "      Xin nhà cung cấp chuỗi khoá, rồi chạy 2 lệnh sau (thay <KHOÁ>):"
+  echo "        sed -i 's|^QTI_SECRET=.*|QTI_SECRET=<KHOÁ>|' .env"
+  echo "        docker compose up -d backend"
+fi
+
 # ── 7. mDNS: quảng bá exam-server.local để KIOSK tự tìm server ───────────────
 # Kiosk thi tìm server qua tên mDNS 'exam-server.local'. Linux mặc định không
 # quảng bá mDNS → cài Avahi + đặt tên quảng bá = exam-server (KHÔNG đổi hostname

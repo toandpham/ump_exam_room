@@ -247,9 +247,11 @@ async def import_qti_into_sitting(
             "Đề phải được mã hoá bằng phần mềm Mã hoá đề thi (file .qenc) — "
             "không nhận ZIP thường.",
         )
-    if not qti_crypt.verify_code(code):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Mã kích hoạt sai hoặc đã hết hạn.")
+    # verify_code + decrypt cùng cần QTI_SECRET; nếu máy chủ chưa cấu hình thì
+    # get_secret() ném QencError — phải bắt CẢ ở verify_code, không thì lọt ra 500 mù.
     try:
+        if not qti_crypt.verify_code(code):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Mã kích hoạt sai hoặc đã hết hạn.")
         zip_bytes = qti_crypt.decrypt_qenc(raw)
     except qti_crypt.QencError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))

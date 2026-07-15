@@ -175,6 +175,27 @@ async def test_import_qti_rejects_plain_zip(client, factory):
     assert "mã hoá" in r.json()["detail"].lower()
 
 
+async def test_import_qti_missing_secret_gives_clear_400(client, factory, monkeypatch):
+    """Máy chủ chưa cấu hình QTI_SECRET (.env rỗng — bản cài mới) → 400 báo rõ,
+    KHÔNG được lọt thành 500 mù. verify_code() gọi get_secret() nên phải bắt QencError
+    cả ở bước kiểm mã, không chỉ ở bước giải mã (sự cố thực địa 15-07)."""
+    from app.config import settings as _s
+
+    admin, ptok = await factory.admin()
+    exam, sitting = await factory.empty_active_exam(admin.id)
+    body = qenc(_build_qti_zip())
+    code = qenc_code()
+    monkeypatch.setattr(_s, "qti_secret", "")   # giả lập .env chưa điền secret
+    r = await client.post(
+        f"/api/admin/sittings/{sitting.id}/import-qti",
+        files={"file": ("exam.qenc", body, "application/octet-stream")},
+        data={"code": code},
+        headers=auth(ptok),
+    )
+    assert r.status_code == 400, f"phải 400 chứ không 500, got {r.status_code}"
+    assert "QTI_SECRET" in r.json()["detail"]
+
+
 async def test_import_qti_rejects_garbage_file(client, factory):
     admin, ptok = await factory.admin()
     exam, sitting = await factory.empty_active_exam(admin.id)
