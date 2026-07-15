@@ -55,6 +55,7 @@ def build_template() -> bytes:
     for row in ws.iter_rows(min_col=1, max_col=1):
         for cell in row:
             cell.number_format = "@"
+            cell.quotePrefix = True   # dấu ' — chặn Excel xoá số 0 đầu khi người nhập gõ
     ws.freeze_panes = "A2"
     bio = io.BytesIO()
     wb.save(bio)
@@ -83,9 +84,20 @@ def _cell_str(value: Any) -> str:
 
 
 def _parse_cccd(value: Any) -> str:
+    """Đọc ô số giấy tờ (CCCD/hộ chiếu) — giữ bằng được SỐ 0 ĐẦU.
+
+    Excel hay tự nuốt số 0 đầu, nên người nhập DS thường gõ dấu nháy đơn để ép ô
+    thành chữ: ``'0123456789``. Excel thường không đưa dấu này vào giá trị (nó là
+    thuộc tính quotePrefix), NHƯNG khi dán từ nơi khác / qua CSV / gõ 2 lần thì dấu
+    nháy lọt thẳng vào giá trị → phải bỏ đi, nếu không sẽ hỏng cả số giấy tờ.
+
+    Ô đã bị Excel biến thành SỐ (người nhập quên dấu nháy) → bù lại 0 cho đủ 12 số
+    của CCCD (hộ chiếu có chữ nên không rơi vào nhánh này).
+    """
     if isinstance(value, (int, float)):
         return str(int(value)).zfill(12)
-    return _cell_str(value)
+    # bỏ dấu nháy ép-chữ ở đầu (số giấy tờ không bao giờ bắt đầu bằng ')
+    return _cell_str(value).lstrip("'’").strip()
 
 
 def _parse_birth_date(value: Any) -> date:
@@ -197,7 +209,10 @@ def export_candidates(rows: list[dict]) -> bytes:
             r.get("attempt_number"), r.get("room_name"), r.get("exam_name"),
             "Có" if r.get("photo_path") else "Không",
         ])
-        ws.cell(row=ws.max_row, column=1).number_format = "@"
+        # Ép Chữ + bật dấu nháy ' của Excel → KHÔNG nuốt số 0 đầu CCCD/hộ chiếu
+        _c = ws.cell(row=ws.max_row, column=1)
+        _c.number_format = "@"
+        _c.quotePrefix = True
     ws.freeze_panes = "A2"
     bio = io.BytesIO()
     wb.save(bio)

@@ -54,7 +54,9 @@ def export_excel(exam_name: str, rooms: list[dict]) -> bytes:
             cell.fill = fill
         for idx, c in enumerate(room["candidates"], start=1):
             ws.append([idx, c["full_name"], c["cccd"], c["unit"]])
-            ws.cell(row=ws.max_row, column=3).number_format = "@"
+            _c = ws.cell(row=ws.max_row, column=3)
+            _c.number_format = "@"
+            _c.quotePrefix = True   # giữ số 0 đầu CCCD
         for i, w in enumerate([8, 30, 16, 30], start=1):
             ws.column_dimensions[get_column_letter(i)].width = w
     if first:  # no rooms → keep a placeholder sheet

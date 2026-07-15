@@ -224,6 +224,13 @@ def export_excel(report: dict, exam_name: str | None = None) -> bytes:
     ws_kq.append([f"Ngày thi: {exam_date}"])
     ws_kq.append([])  # dòng trống
 
+    def _force_text(cell) -> None:
+        """Ép ô thành dạng Chữ + bật dấu nháy ' (quotePrefix) của Excel → KHÔNG bị
+        nuốt SỐ 0 ĐẦU của CCCD/hộ chiếu, kể cả khi người dùng copy sang sheet khác
+        hay lưu lại. Dấu nháy là thuộc tính ô nên KHÔNG lọt vào giá trị (nhìn sạch)."""
+        cell.number_format = "@"
+        cell.quotePrefix = True
+
     headers_kq = ["STT", "Số báo danh", "Họ đệm", "Tên", "Tổ", "Ngày sinh", "Điểm", "Số câu đúng"]
     ws_kq.append(headers_kq)
     for col_idx in range(1, len(headers_kq) + 1):
@@ -247,6 +254,7 @@ def export_excel(report: dict, exam_name: str | None = None) -> bytes:
             diem_cell,
             so_cau,
         ])
+        _force_text(ws_kq.cell(row=ws_kq.max_row, column=2))   # Số báo danh (CCCD/hộ chiếu)
 
     # Độ rộng cột
     for col, width in zip("ABCDEFGH", [6, 16, 22, 12, 14, 14, 10, 14]):
@@ -286,6 +294,7 @@ def export_excel(report: dict, exam_name: str | None = None) -> bytes:
             [row["stt"], row["cccd"], row["ho_dem"], row["ten"], _fmt_date(row["birth_date"])]
             + row["answers"]
         )
+        _force_text(ws_da.cell(row=ws_da.max_row, column=2))   # Mã sinh viên (CCCD/hộ chiếu)
 
     # Độ rộng cột cố định
     ws_da.column_dimensions["A"].width = 14
