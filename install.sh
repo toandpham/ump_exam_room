@@ -150,39 +150,6 @@ else
   info "⚠️  Không cấu hình được Avahi — đặt IP tĩnh server vào kiosk.config.json (serverIp)."
 fi
 
-# ── 7b. Tự động cập nhật khi có bản vá (AD-87) ───────────────────────────────
-# Chạy scripts/auto-update.sh lúc 02:15 và 03:15 hằng đêm. Script tự bỏ qua nếu
-# chưa có bản vá, hoặc có bất kỳ dấu hiệu nào của kỳ thi đang/sắp diễn ra; luôn
-# sao lưu DB trước và tự quay về bản cũ nếu hỏng. Nhật ký: logs/auto-update.log
-# Tắt:  sudo systemctl disable --now exam-autoupdate.timer
-if command -v systemctl >/dev/null 2>&1; then
-  cat > /etc/systemd/system/exam-autoupdate.service <<UNIT
-[Unit]
-Description=Tu dong cap nhat he thong thi (chi khi khong co ky thi)
-After=docker.service
-[Service]
-Type=oneshot
-WorkingDirectory=${PWD}
-ExecStart=${PWD}/scripts/auto-update.sh
-UNIT
-  cat > /etc/systemd/system/exam-autoupdate.timer <<'UNIT'
-[Unit]
-Description=Kiem tra ban va mua dem (02:15 va 03:15)
-[Timer]
-OnCalendar=*-*-* 02,03:15:00
-Unit=exam-autoupdate.service
-[Install]
-WantedBy=timers.target
-UNIT
-  chmod +x "${PWD}/scripts/auto-update.sh" 2>/dev/null || true
-  systemctl daemon-reload >/dev/null 2>&1 || true
-  systemctl enable --now exam-autoupdate.timer >/dev/null 2>&1 \
-    && info "Tự động cập nhật: BẬT (02:15 & 03:15 hằng đêm, chỉ khi không có kỳ thi)." \
-    || info "⚠️  Không bật được tự động cập nhật — dùng ./update.sh thủ công."
-else
-  info "Không có systemd — bỏ qua tự động cập nhật; dùng ./update.sh thủ công."
-fi
-
 # ── 8. Tổng kết ──────────────────────────────────────────────────────────────
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo
@@ -203,7 +170,5 @@ echo "  Lệnh thường dùng:"
 echo "    docker compose ps               # trạng thái dịch vụ"
 echo "    docker compose logs -f backend  # xem log"
 echo "    docker compose down             # dừng hệ thống"
-echo "    ./update.sh                     # CẬP NHẬT ngay: git pull + build + restart"
-echo "    tail -f logs/auto-update.log    # nhật ký TỰ ĐỘNG cập nhật (02:15 & 03:15 đêm)"
-echo "    systemctl disable --now exam-autoupdate.timer   # tắt tự động cập nhật"
+echo "    ./update.sh                     # CẬP NHẬT/sửa lỗi: git pull + build + restart"
 echo
