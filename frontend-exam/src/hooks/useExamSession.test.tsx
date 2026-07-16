@@ -93,6 +93,37 @@ describe("useExamSession (AD-69 batch save)", () => {
     }
   });
 
+  it("AD-88: đáp án lên server ~2.5s sau khi chọn (không đợi nhịp 10s)", async () => {
+    // Sự cố 16-07: máy hỏng giữa giờ → đáp án chưa kịp nhịp 10s là mất khi đổi máy.
+    vi.useFakeTimers();
+    try {
+      const d = data(600);   // còn nhiều giờ — KHÔNG nằm trong cửa sổ 20s cuối
+      const { result } = renderHook(() => useExamSession("s1", d, () => {}, ws));
+      act(() => result.current.selectOption("q1", "A"));
+      expect(answersBulk).not.toHaveBeenCalled();               // chưa đẩy ngay
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      expect(answersBulk).toHaveBeenCalledTimes(1);             // ~2.5s sau là lên server
+      expect(answersBulk).toHaveBeenCalledWith([{ question_id: "q1", selected_option: "A" }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("AD-88: nhiều lần đổi liên tiếp gộp chung MỘT lô (không dập server)", async () => {
+    vi.useFakeTimers();
+    try {
+      const d = data(600);
+      const { result } = renderHook(() => useExamSession("s1", d, () => {}, ws));
+      act(() => result.current.selectOption("q1", "A"));
+      act(() => result.current.selectOption("q1", "B"));   // đổi ý trong cửa sổ 2.5s
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      expect(answersBulk).toHaveBeenCalledTimes(1);
+      expect(answersBulk).toHaveBeenCalledWith([{ question_id: "q1", selected_option: "B" }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("đẩy đáp án dồn nhịp (~2.5s) ở 20s cuối để kịp về trước end_time", async () => {
     vi.useFakeTimers();
     try {

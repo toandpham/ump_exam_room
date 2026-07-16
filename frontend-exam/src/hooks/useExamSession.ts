@@ -114,6 +114,33 @@ export function useExamSession(
     return () => clearInterval(id);
   }, [nearEnd, timeUp, paused]);
 
+  // AD-88: đẩy SỚM ~2.5s sau lần đổi đáp án (gộp các lần đổi liên tiếp trong cửa sổ).
+  // Sự cố thực địa 16-07: máy trục trặc giữa giờ → đáp án chưa kịp theo nhịp 10s lên
+  // server → qua máy khác mất bài. Debounce này thu cửa sổ mất còn ~3s. Tải server có
+  // trần = 1 request/2.5s cho MỖI thí sinh đang đổi đáp án (500 máy đồng loạt ≈ 200
+  // req/s = đúng mức load test AD-44 đã pass); thực tế thấp hơn nhiều vì mỗi câu làm
+  // ~30s+. Nhịp 10s ở trên giữ làm lưới an toàn/retry.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Gương ref của paused/timeUp cho callback hẹn giờ (closure sẽ ôm giá trị cũ):
+  // nổ flush ĐÚNG LÚC vừa bị tạm dừng → server 409 → flushBatch tưởng "từ chối vĩnh
+  // viễn" mà vứt đáp án khỏi hàng chờ → mất điểm câu đó. Gặp pause/hết giờ thì thôi,
+  // để nhịp 10s đẩy lại sau khi được tiếp tục.
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  const timeUpRef = useRef(timeUp);
+  timeUpRef.current = timeUp;
+  useEffect(() => () => {                       // dọn timer khi unmount
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  }, []);
+  function scheduleFlushSoon() {
+    if (debounceRef.current) return;            // đã hẹn — lần đổi sau gộp chung lô
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      if (pausedRef.current || timeUpRef.current) return;
+      void flushBatch();
+    }, 2500);
+  }
+
   async function flushBatch() {
     const snapshot = { ...dirtyRef.current };
     const keys = Object.keys(snapshot);
@@ -139,7 +166,8 @@ export function useExamSession(
     const next = { ...answers, [qid]: opt };
     setAnswers(next);
     localStorage.setItem(ansKey, JSON.stringify(next));   // lưu local ngay (bền vững)
-    dirtyRef.current[qid] = opt;                           // chờ đẩy theo lô (10s)
+    dirtyRef.current[qid] = opt;
+    scheduleFlushSoon();                                   // AD-88: lên server sau ~2.5s
     setSaveStatus("saved");                                // đã an toàn ở máy con
   }
 

@@ -49,6 +49,14 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
 
   return (
     <div className="h-screen flex flex-col bg-slate-100 overflow-hidden">
+      {/* AD-88: mất đồng bộ kéo dài = bài làm CHỈ nằm trên máy này — máy hỏng là mất.
+          Phải la to để thí sinh/giám thị xử lý từ sớm, không phải cuối giờ mới biết. */}
+      {saveStatus === "disconnected" && (
+        <div className="bg-red-600 text-white text-center text-sm font-semibold px-4 py-2">
+          ⚠️ MẤT KẾT NỐI MÁY CHỦ — bài làm chưa được đồng bộ, KHÔNG tự ý đổi máy.
+          Cứ làm tiếp và <u>giơ tay báo giám thị</u> kiểm tra mạng máy này.
+        </div>
+      )}
       <header className="bg-white border-b px-4 py-2 flex items-center justify-between">
         <span className="font-medium text-slate-800 text-base">{candidate?.full_name}</span>
         <div className="flex items-center gap-4">
@@ -235,7 +243,7 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
   const map = {
     saved: { icon: <Wifi size={16} />, text: "Đã lưu", cls: "text-green-600" },
     saving: { icon: <Wifi size={16} />, text: "Đang lưu…", cls: "text-amber-500" },
-    disconnected: { icon: <WifiOff size={16} />, text: "Đã lưu trên máy — đang đồng bộ…", cls: "text-amber-600" },
+    disconnected: { icon: <WifiOff size={16} />, text: "Mất kết nối — báo giám thị", cls: "text-red-600 font-semibold" },
   }[status];
   return <span className={`flex items-center gap-1 text-xs ${map.cls}`}>{map.icon} {map.text}</span>;
 }
