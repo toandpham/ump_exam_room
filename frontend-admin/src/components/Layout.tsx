@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { BadgeCheck, ChevronLeft, ChevronRight, ClipboardList, DoorOpen, KeyRound, LayoutDashboard, LogOut, ScrollText, Users2 } from "lucide-react";
+import { BadgeCheck,
+  DownloadCloud, ChevronLeft, ChevronRight, ClipboardList, DoorOpen, KeyRound, LayoutDashboard, LogOut, ScrollText, Users2 } from "lucide-react";
 import { errorMessage } from "../api/client";
 import { authApi } from "../api/auth";
 import { adminsApi } from "../api/admins";
@@ -25,6 +26,7 @@ const SUPER_NAV = [
   { to: "/audit", label: "Nhật ký", icon: ScrollText },
   { to: "/admins", label: "Tài khoản", icon: Users2 },
   { to: "/license", label: "Giấy phép", icon: BadgeCheck },
+  { to: "/update", label: "Cập nhật", icon: DownloadCloud },
 ];
 
 function navFor(role: string | undefined) {

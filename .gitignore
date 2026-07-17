@@ -78,3 +78,7 @@ logs/
 # Script lỗi thời (sinh slide cũ / SEB đã bỏ) — giữ cục bộ
 /scripts/make_deck*.py
 /scripts/make_seb*.sh
+
+# File giao tiếp cập-nhật-qua-web (AD-89) — runtime, không commit
+/backend/update_request.flag
+/backend/update_state.json

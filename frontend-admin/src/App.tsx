@@ -17,6 +17,7 @@ import AdminsPage from "./pages/AdminsPage";
 import AuditLogPage from "./pages/AuditLogPage";
 import DashboardPage from "./pages/DashboardPage";
 import LicensePage from "./pages/LicensePage";
+import UpdatePage from "./pages/UpdatePage";
 import { useAuthStore } from "./stores/auth";
 
 function HomeRedirect() {
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/exams" element={<ExamsPage />} />
           <Route path="/my-rooms" element={<MyRoomsPage />} />
           <Route path="/admins" element={<AdminsPage />} />
+          <Route path="/update" element={<UpdatePage />} />
           <Route path="/audit" element={<AuditLogPage />} />
           <Route path="/license" element={<LicensePage />} />
           {/* Sitting detail (buổi) — its own layout with Đề thi / Giám sát / Báo cáo */}

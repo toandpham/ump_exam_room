@@ -23,6 +23,7 @@ from app.api.admin import monitor as admin_monitor
 from app.api.admin import reports as admin_reports
 from app.api.admin import rooms as admin_rooms
 from app.api.admin import sittings as admin_sittings
+from app.api.admin import system as admin_system
 from app.api.exam import answer as exam_answer
 from app.api.exam import auth as exam_auth
 from app.api.exam import session as exam_session
@@ -140,6 +141,9 @@ _LICENSE_SKIP = (
     "/api/admin/auth/logout",
     "/api/admin/auth/me",
     "/api/admin/license",
+    # Cập nhật hệ thống (AD-89) phải gọi được cả khi giấy phép hết hạn
+    # (bản vá có thể chính là thứ sửa lỗi giấy phép).
+    "/api/admin/system",
 )
 _LICENSE_CODES = {
     "missing": ("license_missing", "Server chưa có giấy phép — nhập license key"),
@@ -166,6 +170,7 @@ async def license_gate(request, call_next):
 _proctor_only = [Depends(require_roles(AdminRole.PROCTOR.value))]
 app.include_router(admin_auth.router, prefix="/api/admin/auth", tags=["admin-auth"])
 app.include_router(admin_license.router, prefix="/api/admin/license", tags=["admin-license"])
+app.include_router(admin_system.router, prefix="/api/admin/system", tags=["admin-system"])
 app.include_router(admin_admins.router, prefix="/api/admin/admins", tags=["admin-admins"])
 app.include_router(admin_exams.router, prefix="/api/admin/exams", tags=["admin-exams"])
 app.include_router(admin_sittings.router, prefix="/api/admin", tags=["admin-sittings"])

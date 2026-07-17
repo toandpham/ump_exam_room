@@ -150,6 +150,32 @@ else
   info "⚠️  Không cấu hình được Avahi — đặt IP tĩnh server vào kiosk.config.json (serverIp)."
 fi
 
+# ── 7b. Watcher cập nhật từ trang Quản trị (AD-89) ───────────────────────────
+# Cho phép super_admin bấm "Cập nhật" ngay trong web — không cần SSH. Watcher chạy
+# nền trên host, nhận yêu cầu qua file backend/update_request.flag, chạy ./update.sh
+# (vẫn chặn khi đang thi) và ghi tiến trình cho trang admin đọc.
+if command -v systemctl >/dev/null 2>&1; then
+  cat > /etc/systemd/system/exam-update-watcher.service <<UNIT
+[Unit]
+Description=Nhan yeu cau cap nhat tu trang Quan tri
+After=docker.service
+[Service]
+WorkingDirectory=${PWD}
+ExecStart=${PWD}/scripts/update-watcher.sh
+Restart=always
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
+UNIT
+  chmod +x "${PWD}/scripts/update-watcher.sh" 2>/dev/null || true
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  systemctl enable --now exam-update-watcher.service >/dev/null 2>&1 \
+    && info "Cập nhật qua web: BẬT (trang Quản trị → Cập nhật)." \
+    || info "⚠️  Không bật được watcher cập nhật — dùng ./update.sh thủ công."
+else
+  info "Không có systemd — cập nhật qua web không hoạt động; dùng ./update.sh."
+fi
+
 # ── 8. Tổng kết ──────────────────────────────────────────────────────────────
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo
