@@ -9,7 +9,7 @@ import LabReference from "../components/LabReference";
 import QuestionNotes, { clearNotes } from "../components/QuestionNotes";
 import QuestionNavigator from "./exam/QuestionNavigator";
 import QuestionCard from "./exam/QuestionCard";
-import { PRELOAD_AHEAD, preloadImages } from "../lib/preload";
+import { PRELOAD_AHEAD, imageUrlsOf, preloadImages } from "../lib/preload";
 
 export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: string; onSubmitted: () => void; ws: ExamWs }) {
   const candidate = useStore((s) => s.candidate);
@@ -32,12 +32,7 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
   // máy Win7/4GB không chịu nổi). Chạy sau khi câu hiện tại đã hiển thị.
   useEffect(() => {
     if (!data) return;
-    const urls: string[] = [];
-    for (const q of data.questions.slice(current + 1, current + 1 + PRELOAD_AHEAD)) {
-      urls.push(...q.images);
-      q.options.forEach((o) => urls.push(...o.images));
-    }
-    preloadImages(urls);
+    preloadImages(imageUrlsOf(data.questions.slice(current + 1, current + 1 + PRELOAD_AHEAD)));
   }, [current, data]);
 
   // Jump to the next still-unanswered question, scanning forward from the

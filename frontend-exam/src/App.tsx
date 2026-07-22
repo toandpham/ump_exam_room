@@ -3,7 +3,7 @@ import axios from "axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MonitorX } from "lucide-react";
 import { examApi } from "./api/exam";
-import { PREFETCH_QUESTIONS, preloadImages } from "./lib/preload";
+import { PREFETCH_QUESTIONS, imageUrlsOf, preloadAllPaced, preloadImages } from "./lib/preload";
 import { useStore } from "./store";
 import { useExamSocket, type WsEvent } from "./hooks/useExamSocket";
 import LoginScreen from "./screens/LoginScreen";
@@ -103,13 +103,19 @@ function ExamShell() {
     //  - máy yếu (Win7/4GB): giữ toàn bộ ảnh đã giải nén trong RAM → swap → ì ạch.
     // Ảnh các câu sau được nạp dần khi thí sinh tới gần (xem ExamScreen) — vẫn tức
     // thì vì đây là mạng LAN nội bộ.
-    const urls: string[] = [];
-    for (const q of prefetch.data.questions.slice(0, PREFETCH_QUESTIONS)) {
-      urls.push(...q.images);
-      q.options.forEach((o) => urls.push(...o.images));
-    }
-    preloadImages(urls);
+    preloadImages(imageUrlsOf(prefetch.data.questions.slice(0, PREFETCH_QUESTIONS)));
   }, [state?.status, prefetch.data]);
+
+  // AD-90c: nạp TOÀN BỘ ảnh đề xuống CACHE ĐĨA, rải chậm (~1 ảnh/giây, mỗi máy lệch
+  // giờ xuất phát) trong suốt lúc chờ bắt đầu và cả khi đang thi. Vào giờ làm bài
+  // hầu như không phải đụng tới mạng nữa, mà RAM vẫn nhẹ vì chỉ ảnh của câu đang
+  // hiển thị mới được giữ. Đổi 'ready' → 'in_progress' thì effect chạy lại: hàng đợi
+  // khởi động lại nhưng BỎ QUA ảnh đã tải (sổ `seen`), nên không tải trùng.
+  const warming = state?.status === "ready" || state?.status === "in_progress";
+  useEffect(() => {
+    if (!warming || !prefetch.data) return;
+    return preloadAllPaced(imageUrlsOf(prefetch.data.questions));
+  }, [warming, prefetch.data]);
 
   // ONE socket per candidate (AD-14): ExamShell owns it. Every control event
   // refreshes state (instant distribute/start/end transitions) and is forwarded
