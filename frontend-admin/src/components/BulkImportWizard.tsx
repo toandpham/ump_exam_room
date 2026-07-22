@@ -68,6 +68,16 @@ export default function BulkImportWizard({ open, onClose, lockedExamId }: {
       {step === 2 && preview && (
         <div className="space-y-3 text-sm">
           <p>Tổng {preview.total_rows} dòng · <span className="text-green-700">{preview.valid_count} hợp lệ</span> · <span className="text-red-600">{preview.error_count} lỗi</span></p>
+          {/* Dòng lỗi KHÔNG được nhập — phải đập vào mắt. Danh sách 400+ dòng khiến
+              vài dòng lỗi lọt thỏm ở giữa bảng (sự cố 22-07: 420 → 400 mà không ai
+              để ý). Nên: banner đỏ + đẩy dòng lỗi lên ĐẦU bảng. */}
+          {preview.error_count > 0 && (
+            <p className="bg-red-50 border border-red-300 text-red-800 rounded p-2 font-semibold">
+              ⚠️ {preview.error_count} dòng sẽ KHÔNG được nhập (xem lý do ở đầu bảng).
+              Chỉ {preview.valid_count}/{preview.total_rows} thí sinh được tạo.
+              Sửa file rồi tải lên lại nếu cần đủ danh sách.
+            </p>
+          )}
           <div className="max-h-72 overflow-auto border rounded">
             <table className="w-full text-xs">
               <thead className="bg-slate-50 sticky top-0"><tr>
@@ -75,7 +85,7 @@ export default function BulkImportWizard({ open, onClose, lockedExamId }: {
                 <th className="px-2 py-1 text-left">Họ tên</th><th className="px-2 py-1 text-left">Lỗi</th>
               </tr></thead>
               <tbody>
-                {preview.rows.map((r) => (
+                {[...preview.rows].sort((a, b) => Number(a.valid) - Number(b.valid)).map((r) => (
                   <tr key={r.row_number} className={r.valid ? "" : "bg-red-50"}>
                     <td className="px-2 py-1">{r.row_number}</td>
                     <td className="px-2 py-1 font-mono">

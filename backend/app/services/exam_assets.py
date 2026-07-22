@@ -11,11 +11,26 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
+import logging
 import shutil
 import uuid
 from pathlib import Path
 
+from PIL import Image, ImageFile
+
 from app.config import settings
+
+logger = logging.getLogger("exam.assets")
+
+# Ảnh đề rộng hơn ngưỡng này sẽ được thu nhỏ khi nạp đề (AD-90). Máy thi thật là
+# Win7/4GB: ảnh gốc từ máy scan/điện thoại (3000–4000px) tốn cả chục MB RAM mỗi
+# tấm khi giải nén, trong khi khung hiển thị chỉ ~800px và phóng to hết cỡ màn
+# hình cũng chỉ ~1600px. Thu nhỏ 1 lần ở server → nhẹ cho CẢ 400 máy.
+MAX_IMAGE_WIDTH = 1600
+JPEG_QUALITY = 85
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # mime → đuôi file (ảnh QTI nội tuyến thường jpg/png/webp/gif).
 _EXT = {
@@ -30,6 +45,33 @@ _EXT = {
 
 def _sitting_dir(sitting_id: uuid.UUID) -> Path:
     return Path(settings.upload_dir) / f"sitting_{sitting_id.hex}"
+
+
+def shrink_image(data: bytes, mime: str | None) -> tuple[bytes, str | None]:
+    """Thu nhỏ ảnh quá khổ về ``MAX_IMAGE_WIDTH`` (AD-90). Trả (bytes, mime) —
+    ảnh đã đủ nhỏ, định dạng lạ hoặc lỗi giải mã thì trả NGUYÊN BẢN (không bao
+    giờ làm hỏng đề vì một tấm ảnh)."""
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            if im.width <= MAX_IMAGE_WIDTH:
+                return data, mime
+            fmt = (im.format or "").upper()
+            if fmt not in {"JPEG", "PNG", "WEBP"}:
+                return data, mime
+            height = max(1, round(im.height * MAX_IMAGE_WIDTH / im.width))
+            resized = im.convert("RGB") if fmt == "JPEG" else im.copy()
+            resized = resized.resize((MAX_IMAGE_WIDTH, height), Image.LANCZOS)
+            buf = io.BytesIO()
+            if fmt == "JPEG":
+                resized.save(buf, "JPEG", quality=JPEG_QUALITY, optimize=True)
+            else:
+                resized.save(buf, fmt)
+            out = buf.getvalue()
+            # Có trường hợp file nén lại còn to hơn (PNG ảnh chụp) → giữ bản gốc.
+            return (out, mime) if len(out) < len(data) else (data, mime)
+    except Exception as exc:  # noqa: BLE001 — ảnh lạ/hỏng: dùng nguyên bản
+        logger.warning("shrink_image bỏ qua một ảnh: %s", exc)
+        return data, mime
 
 
 def materialize_payload_images(sitting_id: uuid.UUID, payload: dict) -> dict:
@@ -55,6 +97,7 @@ def materialize_payload_images(sitting_id: uuid.UUID, payload: dict) -> dict:
             except Exception:
                 # Ảnh hỏng → bỏ qua, không chặn cả buổi.
                 continue
+            data, _ = shrink_image(data, im.get("mime"))
             sha = hashlib.sha256(data).hexdigest()
             ext = _EXT.get((im.get("mime") or "").lower(), "jpg")
             fname = f"{sha}.{ext}"

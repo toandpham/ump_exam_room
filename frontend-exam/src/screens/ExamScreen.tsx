@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Calculator, FlaskConical, Hourglass, NotebookPen, Pause, Wifi, WifiOff } from "lucide-react";
 import { examApi } from "../api/exam";
@@ -9,6 +9,7 @@ import LabReference from "../components/LabReference";
 import QuestionNotes, { clearNotes } from "../components/QuestionNotes";
 import QuestionNavigator from "./exam/QuestionNavigator";
 import QuestionCard from "./exam/QuestionCard";
+import { PRELOAD_AHEAD, preloadImages } from "../lib/preload";
 
 export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: string; onSubmitted: () => void; ws: ExamWs }) {
   const candidate = useStore((s) => s.candidate);
@@ -23,8 +24,21 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
   const [submitOpen, setSubmitOpen] = useState(false);
   // Nộp/hết giờ → xoá giấy nháp của phiên rồi chuyển sang màn kết quả.
   const handleSubmitted = () => { clearNotes(sessionId); onSubmitted(); };
-  const { answers, selectOption, saveStatus, secondsLeft, paused, timeUp, doSubmit, tabCount } =
+  const { answers, selectOption, saveStatus, secondsLeft, paused, timeUp, doSubmit, tabCount,
+          submitError, clearSubmitError } =
     useExamSession(sessionId, data, handleSubmitted, ws);
+
+  // AD-90: nạp trước ảnh của vài câu KẾ TIẾP (thay vì cả đề một lúc lúc phát đề —
+  // máy Win7/4GB không chịu nổi). Chạy sau khi câu hiện tại đã hiển thị.
+  useEffect(() => {
+    if (!data) return;
+    const urls: string[] = [];
+    for (const q of data.questions.slice(current + 1, current + 1 + PRELOAD_AHEAD)) {
+      urls.push(...q.images);
+      q.options.forEach((o) => urls.push(...o.images));
+    }
+    preloadImages(urls);
+  }, [current, data]);
 
   if (!data) return <div className="min-h-screen flex items-center justify-center text-slate-500">Đang tải đề…</div>;
 
@@ -168,6 +182,19 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
         </Overlay>
       )}
 
+      {/* AD-90: nộp bài KHÔNG lên được server — báo rõ + cho bấm lại (trước đây
+          lỗi bị nuốt im lặng, thí sinh tưởng đã nộp mà server vẫn "đang làm"). */}
+      {submitError && (
+        <ConfirmOverlay
+          title="Chưa nộp được bài!"
+          confirmText="Thử nộp lại"
+          onCancel={clearSubmitError}
+          onConfirm={() => { clearSubmitError(); doSubmit(false); }}
+        >
+          <span className="text-rose-700 font-semibold">{submitError}</span>
+        </ConfirmOverlay>
+      )}
+
       {/* Xác nhận nộp bài — modal TRONG TRANG (không dùng confirm() gốc) */}
       {submitOpen && (
         <ConfirmOverlay
@@ -192,7 +219,7 @@ function ConfirmOverlay({ title, children, confirmText, onConfirm, onCancel }: {
   onConfirm: () => void; onCancel: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/80 flex items-center justify-center backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 bg-slate-900/80 flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-2xl p-7 max-w-sm w-[90%] text-center">
         <h2 className="text-xl font-bold text-slate-800">{title}</h2>
         <p className="text-sm text-slate-600 mt-2">{children}</p>
@@ -216,7 +243,7 @@ function Overlay({ icon, iconBg, title, children, footer }: {
   children: React.ReactNode; footer?: React.ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/90 flex items-center justify-center backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 bg-slate-900/90 flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm text-center">
         <div className={`mx-auto w-16 h-16 rounded-full ${iconBg} flex items-center justify-center mb-4`}>{icon}</div>
         <h2 className="text-xl font-bold text-slate-800">{title}</h2>

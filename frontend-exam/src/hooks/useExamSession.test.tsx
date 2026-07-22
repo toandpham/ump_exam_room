@@ -139,6 +139,46 @@ describe("useExamSession (AD-69 batch save)", () => {
     }
   });
 
+  it("AD-90: nộp hỏng mạng → báo lỗi, GIỮ bài local, cho nộp lại", async () => {
+    vi.useFakeTimers();
+    try {
+      submit.mockRejectedValue({ isAxiosError: true, response: undefined });
+      const onSubmitted = vi.fn();
+      const d = data(600);
+      const { result } = renderHook(() => useExamSession("s1", d, onSubmitted, ws));
+      act(() => result.current.selectOption("q1", "A"));
+      await act(async () => {
+        const p = result.current.doSubmit(false);
+        // Chỉ tua đủ 2 nhịp chờ giữa các lần thử (1s + 2s) — KHÔNG runAllTimers
+        // vì hook có setInterval lặp vô hạn (nhịp đẩy lô / poll trạng thái).
+        await vi.advanceTimersByTimeAsync(5000);
+        await p;
+      });
+      expect(submit).toHaveBeenCalledTimes(3);            // thử lại 3 lần
+      expect(onSubmitted).not.toHaveBeenCalled();          // KHÔNG chuyển màn kết quả
+      expect(result.current.submitError).toContain("Không gửi được bài");
+      expect(localStorage.getItem("answers_s1")).not.toBeNull();   // bài vẫn còn
+      // Mở khoá: bấm nộp lại chạy thật (lần này server nhận).
+      submit.mockResolvedValue({});
+      await act(async () => { await result.current.doSubmit(false); });
+      expect(onSubmitted).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+      submit.mockReset(); submit.mockResolvedValue({});
+    }
+  });
+
+  it("AD-90: server trả 4xx khi nộp = phiên đã chốt → coi như nộp xong", async () => {
+    submit.mockRejectedValueOnce({ isAxiosError: true, response: { status: 409 } });
+    const onSubmitted = vi.fn();
+    const d = data(600);   // GIỮ NGUYÊN object giữa các lần render (đổi = lặp vô hạn)
+    const { result } = renderHook(() => useExamSession("s1", d, onSubmitted, ws));
+    await act(async () => { await result.current.doSubmit(true); });
+    expect(onSubmitted).toHaveBeenCalledOnce();
+    expect(result.current.submitError).toBeNull();
+    submit.mockReset(); submit.mockResolvedValue({});
+  });
+
   it("locks input when time is up (no answer change, no save)", () => {
     const d = data(0);
     const { result } = renderHook(() => useExamSession("s1", d, () => {}, ws));

@@ -85,6 +85,10 @@ run_git log --oneline "$BEFORE..$AFTER" | sed 's/^/    /'
 # ── 3. Build lại + khởi động lại (áp bản vá) ─────────────────────────────────
 info "Build lại image + khởi động lại các dịch vụ…"
 docker compose up -d --build
+# Caddyfile là bind-mount: đổi nội dung KHÔNG làm compose tạo lại container, mà
+# Caddy chỉ đọc cấu hình lúc khởi động → phải restart tay, nếu không bản vá liên
+# quan proxy/cache sẽ không có tác dụng (AD-90).
+docker compose restart caddy >/dev/null
 
 # ── 4. Chờ backend khoẻ ──────────────────────────────────────────────────────
 info "Chờ hệ thống sẵn sàng…"

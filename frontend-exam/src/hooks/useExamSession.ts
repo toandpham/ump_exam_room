@@ -46,6 +46,8 @@ export function useExamSession(
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [paused, setPaused] = useState(false);
+  // Lỗi khi gửi bài lên server (đã thử lại vẫn hỏng) — hiện đỏ để thí sinh bấm lại.
+  const [submitError, setSubmitError] = useState<string | null>(null);
   // Đáp án "bẩn" chờ đẩy lên server theo LÔ (AD-69) — gộp để giảm số request.
   const dirtyRef = useRef<Record<string, string | null>>({});
   const submittedRef = useRef(false);
@@ -174,14 +176,41 @@ export function useExamSession(
   // Thực hiện nộp bài (KHÔNG hỏi xác nhận ở đây — xác nhận do màn thi hiện hộp
   // thoại TRONG TRANG; tránh confirm() gốc của Windows vì trong chế độ kiosk nó là
   // cửa sổ riêng → dễ kẹt/cướp focus). `auto` giữ lại cho tương thích lời gọi.
+  //
+  // AD-90: TRƯỚC ĐÂY lỗi nộp bị nuốt im lặng (`catch {}`) rồi vẫn xoá bài local +
+  // chuyển màn — nếu request hỏng thật (mạng chớp, máy yếu treo) thì thí sinh tưởng
+  // đã nộp trong khi server vẫn thấy "đang làm", mà bấm nộp lại cũng không được
+  // (submittedRef đã khoá). Nay: thử lại 3 lần, thất bại thì MỞ KHOÁ + báo đỏ để
+  // thí sinh bấm lại / gọi giám thị, và KHÔNG xoá bài làm trên máy.
   async function doSubmit(_auto: boolean) {
     if (submittedRef.current) return;
     submittedRef.current = true;
+    setSubmitError(null);
     await flushBatch();   // đẩy nốt đáp án còn lại TRƯỚC khi nộp (server chấm theo DB)
-    try { await examApi.submit(); } catch { /* server may already have it */ }
-    localStorage.removeItem(ansKey);
-    onSubmitted();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await examApi.submit();
+        localStorage.removeItem(ansKey);
+        onSubmitted();
+        return;
+      } catch (err) {
+        // 4xx = server đã chốt phiên này rồi (đã nộp / hết giờ tự nộp) → coi như xong.
+        if (isPermanentError(err)) {
+          localStorage.removeItem(ansKey);
+          onSubmitted();
+          return;
+        }
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+      }
+    }
+    submittedRef.current = false;   // mở khoá để bấm lại được
+    setSubmitError(
+      "Không gửi được bài lên máy chủ (mạng có vấn đề). Bài làm của bạn VẪN CÒN " +
+      "trên máy này — hãy bấm \"Nộp bài\" lại; nếu vẫn lỗi, giơ tay báo giám thị. " +
+      "KHÔNG tắt máy.",
+    );
   }
 
-  return { answers, selectOption, saveStatus, secondsLeft, paused, timeUp, doSubmit, tabCount };
+  return { answers, selectOption, saveStatus, secondsLeft, paused, timeUp, doSubmit,
+           tabCount, submitError, clearSubmitError: () => setSubmitError(null) };
 }

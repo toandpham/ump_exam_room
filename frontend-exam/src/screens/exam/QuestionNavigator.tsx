@@ -22,7 +22,7 @@ export default function QuestionNavigator({
         <button
           onClick={onJumpUnanswered}
           title="Nhảy tới câu kế tiếp chưa trả lời"
-          className="w-full mb-3 flex items-center justify-between gap-1 px-2 py-1.5 rounded-md bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-semibold animate-pulse"
+          className="w-full mb-3 flex items-center justify-between gap-1 px-2 py-1.5 rounded-md bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-semibold"
         >
           <span className="flex items-center gap-1"><SkipForward size={13} /> Chưa làm</span>
           <span className="bg-rose-600 text-white rounded-full px-1.5 min-w-[20px] text-center">{unansweredCount}</span>

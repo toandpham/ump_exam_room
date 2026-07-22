@@ -3,6 +3,7 @@ import axios from "axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MonitorX } from "lucide-react";
 import { examApi } from "./api/exam";
+import { PREFETCH_QUESTIONS, preloadImages } from "./lib/preload";
 import { useStore } from "./store";
 import { useExamSocket, type WsEvent } from "./hooks/useExamSocket";
 import LoginScreen from "./screens/LoginScreen";
@@ -96,11 +97,18 @@ function ExamShell() {
   });
   useEffect(() => {
     if (state?.status !== "ready" || !prefetch.data) return;
-    // Warm cache trình duyệt cho ẢNH (phần nặng) trong lúc chờ.
-    for (const q of prefetch.data.questions) {
-      q.images.forEach((u) => { new Image().src = u; });
-      q.options.forEach((o) => o.images.forEach((u) => { new Image().src = u; }));
+    // Warm cache trình duyệt cho ẢNH của VÀI CÂU ĐẦU thôi (AD-90).
+    // Trước đây nạp ảnh của TOÀN BỘ đề (280 câu) trên MỌI máy cùng lúc lúc phát đề:
+    //  - mạng: 400 máy × cả bộ ảnh dồn trong vài giây → nghẽn switch;
+    //  - máy yếu (Win7/4GB): giữ toàn bộ ảnh đã giải nén trong RAM → swap → ì ạch.
+    // Ảnh các câu sau được nạp dần khi thí sinh tới gần (xem ExamScreen) — vẫn tức
+    // thì vì đây là mạng LAN nội bộ.
+    const urls: string[] = [];
+    for (const q of prefetch.data.questions.slice(0, PREFETCH_QUESTIONS)) {
+      urls.push(...q.images);
+      q.options.forEach((o) => urls.push(...o.images));
     }
+    preloadImages(urls);
   }, [state?.status, prefetch.data]);
 
   // ONE socket per candidate (AD-14): ExamShell owns it. Every control event

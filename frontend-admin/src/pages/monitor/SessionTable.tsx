@@ -79,7 +79,15 @@ function Row({ stt, s, onLogout, onAdmit, onPause, onResume, hasRunning }: {
       </td>
       <td className="px-3 py-2 font-mono text-xs">{s.cccd}</td>
       <td className="px-3 py-2 text-slate-600">{s.room_name || "—"}</td>
-      <td className="px-3 py-2">{STATUS_LABEL[s.status] || s.status}</td>
+      <td className="px-3 py-2">
+        {STATUS_LABEL[s.status] || s.status}
+        {/* Giờ nộp — để không còn tranh cãi "thí sinh bảo đã nộp mà bảng báo đang làm". */}
+        {(s.status === "submitted" || s.status === "timeout") && s.submitted_at && (
+          <span className="block text-xs text-slate-400">
+            {new Date(s.submitted_at).toLocaleTimeString("vi-VN")}
+          </span>
+        )}
+      </td>
       <td className="px-3 py-2 text-right whitespace-nowrap">
         {showAdmit && (
           <button disabled={!canAdmit} onClick={canAdmit ? onAdmit : undefined}

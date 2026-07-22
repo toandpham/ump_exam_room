@@ -63,9 +63,18 @@ def build_template() -> bytes:
 
 
 def parse_rows(content: bytes) -> list[tuple[int, tuple]]:
-    """Return non-empty data rows as (row_number, values_tuple)."""
+    """Return non-empty data rows as (row_number, values_tuple).
+
+    ``reset_dimensions()`` là BẮT BUỘC: ở chế độ read_only, openpyxl tin vào thẻ
+    ``<dimension ref="A1:I..."/>`` khai báo trong file. Nhiều công cụ (LibreOffice,
+    phần mềm xuất DS của trường, file chỉnh sửa rồi lưu lại) ghi thẻ này SAI/thiếu
+    → openpyxl dừng sớm và NUỐT các dòng cuối mà không báo lỗi (sự cố thực địa
+    22-07: file 420 thí sinh chỉ đọc được 400). Reset xong openpyxl tự dò theo dữ
+    liệu thật.
+    """
     wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     ws = wb.active
+    ws.reset_dimensions()
     rows: list[tuple[int, tuple]] = []
     for row_number, values in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         if values is None or all(v is None or str(v).strip() == "" for v in values):

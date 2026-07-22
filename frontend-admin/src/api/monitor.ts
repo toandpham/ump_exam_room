@@ -11,6 +11,7 @@ export interface SessionSummary {
   attempt_number: number;
   photo_path: string | null;
   status: string;
+  submitted_at: string | null;
   paused: boolean;
   self_registered: boolean;
   room_id: string | null;

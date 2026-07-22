@@ -40,6 +40,13 @@
 		# Static uploads (candidate + question images) served from the volume.
 		handle_path /uploads/* {
 			root * /srv/uploads
+			# Tên file ảnh ĐỀ = SHA-256 nội dung (exam_assets) → nội dung KHÔNG BAO GIỜ
+			# đổi dưới cùng một tên. Cho cache vĩnh viễn để máy thi khỏi hỏi lại server
+			# mỗi lần xem lại/phóng to ảnh (máy Win7 yếu + 400 máy cùng lúc).
+			# CHỈ áp cho ảnh đề — ảnh THÍ SINH (/candidates/<cccd>.jpg) có thể được
+			# chụp/đổi lại nên phải để trình duyệt hỏi lại như cũ.
+			@exam_img path /sitting_*/img/*
+			header @exam_img Cache-Control "public, max-age=31536000, immutable"
 			file_server
 		}
 

@@ -35,6 +35,7 @@ export default function QuestionCard({
           <div className="flex flex-wrap gap-2 mb-5">
             {q.images.map((src, i) => (
               <img key={i} src={src} onClick={() => setZoom(src)}
+                loading="lazy" decoding="async"
                 title="Bấm để phóng to"
                 className="max-h-72 rounded border cursor-zoom-in hover:opacity-90" />
             ))}
@@ -58,6 +59,7 @@ export default function QuestionCard({
                   <span className="flex flex-wrap gap-1 shrink-0">
                     {o.images.map((src, i) => (
                       <img key={i} src={src}
+                        loading="lazy" decoding="async"
                         onClick={(e) => { e.stopPropagation(); setZoom(src); }}
                         title="Bấm để phóng to"
                         className="h-10 rounded border cursor-zoom-in hover:opacity-90" />
