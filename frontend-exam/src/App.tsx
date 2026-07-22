@@ -11,6 +11,7 @@ import ConfirmScreen from "./screens/ConfirmScreen";
 import StatusScreen from "./screens/StatusScreen";
 import ExamScreen from "./screens/ExamScreen";
 import SebRequiredScreen from "./screens/SebRequiredScreen";
+import KioskRequiredScreen from "./screens/KioskRequiredScreen";
 import LicenseBlockedScreen from "./screens/LicenseBlockedScreen";
 import NoExamScreen from "./screens/NoExamScreen";
 import CountdownScreen from "./screens/CountdownScreen";
@@ -44,11 +45,13 @@ function LoginGate() {
     retry: false,
   });
 
-  const sebRequired =
-    axios.isAxiosError(error) &&
-    error.response?.status === 403 &&
-    (error.response?.data as any)?.detail?.code === "seb_required";
-  if (sebRequired) return <SebRequiredScreen />;
+  const blockedCode =
+    axios.isAxiosError(error) && error.response?.status === 403
+      ? (error.response?.data as any)?.detail?.code
+      : undefined;
+  // AD-91: máy chủ chỉ nhận request từ phần mềm thi (kiosk).
+  if (blockedCode === "kiosk_required") return <KioskRequiredScreen />;
+  if (blockedCode === "seb_required") return <SebRequiredScreen />;
 
   // AD-74: giấy phép server hết hạn/thiếu → middleware chặn /status bằng 403
   // license_* (code ở cấp cao nhất của body, khác shape với seb_required).
@@ -154,11 +157,13 @@ function ExamShell() {
 
   // SEB enforcement is OFF since AD-64 (escape hatch kept): if SEB_ENFORCE is
   // re-enabled, a request from outside Safe Exam Browser returns 403 seb_required.
-  const sebRequired =
-    axios.isAxiosError(error) &&
-    error.response?.status === 403 &&
-    (error.response?.data as any)?.detail?.code === "seb_required";
-  if (sebRequired) return <SebRequiredScreen />;
+  const blockedCode =
+    axios.isAxiosError(error) && error.response?.status === 403
+      ? (error.response?.data as any)?.detail?.code
+      : undefined;
+  // AD-91: máy chủ chỉ nhận request từ phần mềm thi (kiosk).
+  if (blockedCode === "kiosk_required") return <KioskRequiredScreen />;
+  if (blockedCode === "seb_required") return <SebRequiredScreen />;
 
   // AD-74: giấy phép hết hạn giữa chừng — hiện màn tạm ngưng thay vì lỗi mù.
   const licenseBlocked =

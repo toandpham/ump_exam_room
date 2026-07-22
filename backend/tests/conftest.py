@@ -34,6 +34,7 @@ limiter.enabled = False
 # send a real Config Key header — disable enforcement here (AD-56).
 from app.config import settings as _settings  # noqa: E402
 _settings.seb_enforce = False
+_settings.kiosk_only = False   # client test không phải kiosk
 
 # Giấy phép server (AD-74): suite không có key thật (khoá bí mật nằm ngoài repo)
 # — autouse coi như hợp lệ để 141 test cũ chạy nguyên. test_license.py giữ tham

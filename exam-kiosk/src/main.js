@@ -1,5 +1,5 @@
 "use strict";
-const { app, BrowserWindow, ipcMain, globalShortcut } = require("electron");
+const { app, BrowserWindow, ipcMain, globalShortcut, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { execFile, execFileSync, spawn } = require("child_process");
@@ -469,6 +469,13 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on("second-instance", () => { if (win) win.focus(); });
   app.whenReady().then(() => {
+    // AD-91: đóng dấu MỌI request bằng header riêng để máy chủ nhận ra đây là phần
+    // mềm thi (chỉ kiosk mới được làm bài; trình duyệt thường bị 403). Máy chủ còn
+    // nhận diện dự phòng qua chuỗi "Electron/" trong User-Agent nên các bản kiosk cũ
+    // vẫn thi được — header này là đường nhận diện chính cho bản mới.
+    session.defaultSession.webRequest.onBeforeSendHeaders((details, cb) => {
+      cb({ requestHeaders: { ...details.requestHeaders, "X-Exam-Kiosk": app.getVersion() } });
+    });
     // Tự khôi phục sau crash: nếu lần chạy trước để sót lockdown (sentinel còn) → gỡ trước.
     if (sentinelExists()) setTaskMgr(false);
     setTaskMgr(true);

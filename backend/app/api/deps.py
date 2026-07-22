@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.core import device_lock, seb_config
+from app.core import device_lock, kiosk_guard, seb_config
 from app.core.limiter import client_ip, device_id
 from app.core.redis import redis_client
 from app.core.security import decode_token
@@ -31,11 +31,30 @@ _seb_required_exc = HTTPException(
 )
 
 
-def enforce_seb(request: Request) -> None:
-    """Block any candidate request not coming from Safe Exam Browser (AD-56/AD-59).
-    No-op when seb_enforce is off (tests / dev without SEB). By default verifies
-    SEB presence only (universal .seb, IP-independent); set SEB_CONFIG_KEY for
-    strict per-.seb cryptographic binding."""
+_kiosk_required_exc = HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN,
+    detail={
+        "code": "kiosk_required",
+        "message": "Chỉ được làm bài bằng phần mềm thi (Kiosk). "
+                   "Vui lòng đóng trình duyệt và mở ứng dụng thi trên máy.",
+    },
+)
+
+
+def enforce_exam_client(request: Request) -> None:
+    """Chặn mọi request thi không đến từ phần mềm được phép (AD-91).
+
+    Hai lớp độc lập, bật/tắt bằng biến môi trường:
+      - ``KIOSK_ONLY`` (mặc định BẬT): chỉ nhận request từ ứng dụng kiosk —
+        trình duyệt thường (Firefox/Chrome/Edge…) bị 403 ``kiosk_required``.
+      - ``SEB_ENFORCE`` (mặc định TẮT từ AD-64): chỉ nhận request từ Safe Exam
+        Browser. Giữ lại làm lối thoát nếu sau này quay về SEB.
+
+    Van xả khi cần cho thi tạm bằng trình duyệt: đặt ``KIOSK_ONLY=false`` trong
+    ``.env`` rồi ``docker compose up -d backend``.
+    """
+    if settings.kiosk_only and not kiosk_guard.is_kiosk_request(request):
+        raise _kiosk_required_exc
     if not settings.seb_enforce:
         return
     if not seb_config.verify_seb_header(request, seb_config.current_config_key()):
@@ -208,7 +227,7 @@ async def get_current_candidate(
     enforce single-active-device: the token's jti must match the one currently
     registered for this candidate. A newer login on another device supersedes
     this one → 409 device_superseded."""
-    enforce_seb(request)
+    enforce_exam_client(request)
     try:
         payload = decode_token(credentials.credentials)
     except jwt.PyJWTError:

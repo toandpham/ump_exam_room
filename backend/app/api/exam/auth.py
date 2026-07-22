@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import enforce_seb, get_current_candidate
+from app.api.deps import enforce_exam_client, get_current_candidate
 from app.config import settings
 from app.core.limiter import client_ip, device_id, limiter
 from app.core.redis import redis_client
@@ -95,7 +95,7 @@ async def candidate_login(
     body: CCCDLogin,
     db: AsyncSession = Depends(get_db),
 ) -> CandidateLoginResponse:
-    enforce_seb(request)
+    enforce_exam_client(request)
     ip = client_ip(request)
 
     # 1. Format — accept a CCCD (12 digits) or a passport (6–9 alnum), AD-58.
@@ -220,7 +220,7 @@ async def exam_running_status(
     on a buổi being open — per the operator: opening the exam is enough to switch
     candidates to the login screen. SEB-gated: a plain browser gets 403 seb_required
     here, so opening /thisinh/ outside SEB shows the SEB-required screen (AD-56)."""
-    enforce_seb(request)
+    enforce_exam_client(request)
     # Cache Redis (AD-69): máy chưa đăng nhập poll /status mỗi 5s — tránh query DB mỗi lần.
     exams = await session_service.cached_active_exams(db, redis_client)
     first = exams[0] if exams else None
@@ -238,7 +238,7 @@ async def list_active_exams(
     """SEB-gated (AD-55 I3): returns the single section currently open (model is
     at-most-one active globally). RegisterScreen displays "you're signing up for
     X" from this response. A plain browser gets 403 seb_required like /status."""
-    enforce_seb(request)
+    enforce_exam_client(request)
     rows = list(await db.scalars(
         select(Exam).where(Exam.status == ExamStatus.ACTIVE.value).order_by(Exam.name)
     ))
@@ -258,7 +258,7 @@ async def candidate_register(
     Duplicate CCCD (already registered for ANY exam) is rejected with 409 and
     broadcast to admins as a security warning — possible cheating attempt.
     """
-    enforce_seb(request)
+    enforce_exam_client(request)
     ip = client_ip(request)
 
     # Accept a CCCD (12 digits) or a passport (6–9 alnum), AD-58.
