@@ -1,9 +1,15 @@
+import { memo } from "react";
 import { SkipForward } from "lucide-react";
 import type { ExamQuestion } from "../../api/exam";
 
 /** Left sidebar: progress, jump-to-unanswered, and the numbered question grid
- * (green = answered, gray = not). */
-export default function QuestionNavigator({
+ * (green = answered, gray = not).
+ *
+ * AD-90b: bọc React.memo — đồng hồ đếm ngược làm màn thi vẽ lại MỖI GIÂY; nếu
+ * không chặn ở đây thì cả lưới ~280 nút bị so sánh lại 60 lần/phút, rất tốn CPU
+ * trên máy Win7/4GB (kiosk vẽ bằng CPU). Lưới chỉ cần vẽ lại khi đổi đáp án /
+ * đổi câu — mọi callback truyền vào đều đã được giữ nguyên danh tính. */
+function QuestionNavigator({
   questions, answers, current, total, answeredCount, unansweredCount, onSelect, onJumpUnanswered,
 }: {
   questions: ExamQuestion[];
@@ -50,6 +56,8 @@ export default function QuestionNavigator({
     </aside>
   );
 }
+
+export default memo(QuestionNavigator);
 
 function Legend({ color, label }: { color: string; label: string }) {
   return <div className="flex items-center gap-2"><span className={`w-3 h-3 rounded ${color}`} /> {label}</div>;

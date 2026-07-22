@@ -55,6 +55,8 @@ export function useExamSession(
   const failCountRef = useRef(0);
 
   const ansKey = `answers_${sessionId}`;
+  const ansKeyRef = useRef(ansKey);
+  ansKeyRef.current = ansKey;
 
   // Borrow the shared socket (owned by ExamShell): end-exam control pushes
   // everyone to the result screen; tab changes are reported via `send`.
@@ -163,15 +165,20 @@ export function useExamSession(
     }
   }
 
-  function selectOption(qid: string, opt: string) {
-    if (timeUp || paused) return;   // hết giờ / tạm dừng → khoá, không cho đổi đáp án
-    const next = { ...answers, [qid]: opt };
-    setAnswers(next);
-    localStorage.setItem(ansKey, JSON.stringify(next));   // lưu local ngay (bền vững)
+  // AD-90b: hàm này phải GIỮ NGUYÊN danh tính giữa các lần render (useCallback +
+  // deps rỗng, đọc trạng thái qua ref) — nếu đổi mỗi render thì React.memo của
+  // lưới câu hỏi/thẻ câu hỏi vô hiệu, đồng hồ nhảy mỗi giây là vẽ lại cả 280 nút.
+  const selectOption = useCallback((qid: string, opt: string) => {
+    if (timeUpRef.current || pausedRef.current) return;   // hết giờ / tạm dừng → khoá
+    setAnswers((prev) => {
+      const next = { ...prev, [qid]: opt };
+      localStorage.setItem(ansKeyRef.current, JSON.stringify(next));  // lưu local ngay
+      return next;
+    });
     dirtyRef.current[qid] = opt;
     scheduleFlushSoon();                                   // AD-88: lên server sau ~2.5s
     setSaveStatus("saved");                                // đã an toàn ở máy con
-  }
+  }, []);
 
   // Thực hiện nộp bài (KHÔNG hỏi xác nhận ở đây — xác nhận do màn thi hiện hộp
   // thoại TRONG TRANG; tránh confirm() gốc của Windows vì trong chế độ kiosk nó là

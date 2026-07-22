@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Calculator, FlaskConical, Hourglass, NotebookPen, Pause, Wifi, WifiOff } from "lucide-react";
 import { examApi } from "../api/exam";
@@ -40,26 +40,30 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
     preloadImages(urls);
   }, [current, data]);
 
+  // Jump to the next still-unanswered question, scanning forward from the
+  // current position and wrapping back to the start. Lets candidates triage hard
+  // questions and return without scrubbing the sidebar grid by hand.
+  // AD-90b: các callback dưới đây phải ổn định giữa những lần vẽ lại do ĐỒNG HỒ
+  // (mỗi giây) — nếu không, React.memo của lưới câu hỏi/thẻ câu hỏi mất tác dụng.
+  const goToNextUnanswered = useCallback(() => {
+    if (!data) return;
+    const n = data.total;
+    for (let step = 1; step <= n; step++) {
+      const i = (current + step) % n;
+      if (!answers[data.questions[i].id]) { setCurrent(i); return; }
+    }
+  }, [data, answers, current]);
+
+  // Submitting is final — confirm via an IN-PAGE modal (không dùng confirm() gốc
+  // của Windows: trong kiosk nó là cửa sổ riêng → kẹt + làm lớp chặn phím tạm ngưng).
+  const confirmSubmit = useCallback(() => setSubmitOpen(true), []);
+  const goPrev = useCallback(() => setCurrent((c) => c - 1), []);
+  const goNext = useCallback(() => setCurrent((c) => c + 1), []);
+
   if (!data) return <div className="min-h-screen flex items-center justify-center text-slate-500">Đang tải đề…</div>;
 
   const answeredCount = data.questions.filter((x) => answers[x.id]).length;
   const unansweredCount = data.total - answeredCount;
-
-  // Jump to the next still-unanswered question, scanning forward from the
-  // current position and wrapping back to the start. Lets candidates triage hard
-  // questions and return without scrubbing the sidebar grid by hand.
-  function goToNextUnanswered() {
-    if (!unansweredCount) return;
-    const n = data!.total;
-    for (let step = 1; step <= n; step++) {
-      const i = (current + step) % n;
-      if (!answers[data!.questions[i].id]) { setCurrent(i); return; }
-    }
-  }
-
-  // Submitting is final — confirm via an IN-PAGE modal (không dùng confirm() gốc
-  // của Windows: trong kiosk nó là cửa sổ riêng → kẹt + làm lớp chặn phím tạm ngưng).
-  function confirmSubmit() { setSubmitOpen(true); }
 
   return (
     <div className="h-screen flex flex-col bg-slate-100 overflow-hidden">
@@ -139,8 +143,8 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
             answers={answers}
             unansweredCount={unansweredCount}
             onSelect={selectOption}
-            onPrev={() => setCurrent((c) => c - 1)}
-            onNext={() => setCurrent((c) => c + 1)}
+            onPrev={goPrev}
+            onNext={goNext}
             onJumpUnanswered={goToNextUnanswered}
             onSubmit={confirmSubmit}
           />

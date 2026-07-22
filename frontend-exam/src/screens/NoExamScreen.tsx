@@ -16,7 +16,7 @@ export default function NoExamScreen() {
           kỳ thi bắt đầu — bạn không cần làm gì thêm.
         </p>
         <div className="mt-5 inline-flex items-center gap-2 text-xs text-slate-400">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="w-2 h-2 rounded-full bg-emerald-400" />
           Đang chờ tín hiệu mở thi…
         </div>
       </div>

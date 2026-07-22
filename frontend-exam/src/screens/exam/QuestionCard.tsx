@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { ChevronLeft, ChevronRight, Send, SkipForward } from "lucide-react";
 import type { ExamQuestion } from "../../api/exam";
 
 /** The centered question card: stem + images, the 4 options (positional A/B/C/D
  * labels per QTI — see note below), and the prev / jump-unanswered / next controls.
- * Submit is a floating button bottom-right. Images are click-to-zoom (AD-69). */
-export default function QuestionCard({
+ * Submit is a floating button bottom-right. Images are click-to-zoom (AD-69).
+ * AD-90b: memo — khỏi vẽ lại theo mỗi nhịp đồng hồ (xem QuestionNavigator). */
+function QuestionCard({
   q, index, total, answers, unansweredCount, onSelect, onPrev, onNext, onJumpUnanswered, onSubmit,
 }: {
   q: ExamQuestion;
@@ -124,3 +125,5 @@ export default function QuestionCard({
     </div>
   );
 }
+
+export default memo(QuestionCard);

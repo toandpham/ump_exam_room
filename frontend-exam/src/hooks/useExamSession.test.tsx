@@ -179,6 +179,17 @@ describe("useExamSession (AD-69 batch save)", () => {
     submit.mockReset(); submit.mockResolvedValue({});
   });
 
+  it("AD-90b: selectOption giữ nguyên danh tính giữa các lần vẽ lại (để memo có tác dụng)", () => {
+    const d = data(600);
+    const { result, rerender } = renderHook(() => useExamSession("s1", d, () => {}, ws));
+    const first = result.current.selectOption;
+    rerender();                                  // ví dụ: đồng hồ nhảy 1 giây
+    expect(result.current.selectOption).toBe(first);
+    // Vẫn chạy đúng sau khi rerender (không ôm state cũ).
+    act(() => result.current.selectOption("q1", "A"));
+    expect(result.current.answers).toEqual({ q1: "A" });
+  });
+
   it("locks input when time is up (no answer change, no save)", () => {
     const d = data(0);
     const { result } = renderHook(() => useExamSession("s1", d, () => {}, ws));
