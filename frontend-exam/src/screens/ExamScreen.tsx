@@ -15,7 +15,7 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
   const candidate = useStore((s) => s.candidate);
   // Dùng lại đề đã prefetch ở 'ready' (App.tsx) — staleTime Infinity nên KHÔNG tải lại
   // lúc 'Bắt đầu' (tránh burst 1000 request questions cùng lúc).
-  const { data } = useQuery({ queryKey: ["questions"], queryFn: examApi.questions, staleTime: Infinity, retry: false });
+  const { data } = useQuery({ queryKey: ["questions", sessionId], queryFn: examApi.questions, staleTime: Infinity, retry: false });
 
   const [current, setCurrent] = useState(0);
   const [calcOpen, setCalcOpen] = useState(false);

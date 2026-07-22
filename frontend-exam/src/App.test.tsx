@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { useStore } from "./store";
@@ -45,11 +45,11 @@ vi.mock("./screens/ExamScreen", () => ({
 
 function renderApp() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  return { qc, ...render(
     <QueryClientProvider client={qc}>
       <App />
     </QueryClientProvider>
-  );
+  ) };
 }
 
 describe("ExamShell — reconnect khi buổi đã bắt đầu (SP-2c)", () => {
@@ -61,5 +61,43 @@ describe("ExamShell — reconnect khi buổi đã bắt đầu (SP-2c)", () => {
     renderApp();
     // Nếu dính race, màn hình dừng ở "Đề đã sẵn sàng — chuẩn bị bắt đầu" với số 0.
     expect(await screen.findByText("EXAM_SCREEN", {}, { timeout: 3000 })).toBeTruthy();
+  });
+});
+
+describe("AD-90d — không để đề của buổi/thí sinh trước sót lại", () => {
+  beforeEach(() => {
+    useStore.setState({ token: "tok", candidate: null, exam: null });
+  });
+
+  it("đăng xuất là xoá sạch đề + trạng thái trong bộ nhớ trang", async () => {
+    const { qc } = renderApp();
+    await screen.findByText("EXAM_SCREEN", {}, { timeout: 3000 });
+    expect(qc.getQueryData(["questions", "s1"])).toBeTruthy();   // đề buổi này đã nạp
+
+    await act(async () => { useStore.getState().logout(); });
+    expect(qc.getQueryData(["questions", "s1"])).toBeUndefined();  // đã xoá
+    expect(qc.getQueryData(["state"])).toBeUndefined();
+  });
+
+  it("phiên khác (buổi mới) thì TẢI LẠI đề, không dùng lại bản đã nhớ", async () => {
+    const { examApi } = await import("./api/exam");
+    const { qc } = renderApp();
+    await screen.findByText("EXAM_SCREEN", {}, { timeout: 3000 });
+    const firstCalls = (examApi.questions as any).mock.calls.length;
+
+    // Buổi mới: cùng trình duyệt, chưa tải lại trang, phiên mới.
+    await act(async () => { useStore.getState().logout(); });
+    (examApi.state as any).mockResolvedValue({
+      session_id: "s2", status: "in_progress",
+      started_at: new Date(Date.now() - 30000).toISOString(),
+      end_time: new Date(Date.now() + 3600000).toISOString(),
+      submitted_at: null, server_time: new Date().toISOString(),
+      time_remaining_seconds: 3600, paused: false,
+    });
+    await act(async () => { useStore.setState({ token: "tok2", candidate: null, exam: null }); });
+
+    await screen.findByText("EXAM_SCREEN", {}, { timeout: 3000 });
+    await waitFor(() => expect(qc.getQueryData(["questions", "s2"])).toBeTruthy());
+    expect((examApi.questions as any).mock.calls.length).toBeGreaterThan(firstCalls);
   });
 });

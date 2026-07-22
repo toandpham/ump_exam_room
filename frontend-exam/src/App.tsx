@@ -17,6 +17,16 @@ import CountdownScreen from "./screens/CountdownScreen";
 
 export default function App() {
   const token = useStore((s) => s.token);
+  const qc = useQueryClient();
+
+  // AD-90d: đăng xuất (tự động sau khi xem kết quả, giám thị đá ra, hay bị đá vì
+  // đăng nhập máy khác) → XOÁ SẠCH bộ nhớ đệm của trang: đề, trạng thái, danh tính.
+  // Không có bước này thì thí sinh kế ngồi vào CÙNG trình duyệt (máy không tải lại
+  // trang) có thể thấy lại dữ liệu của người trước / của buổi trước.
+  useEffect(() => {
+    if (!token) qc.clear();
+  }, [token, qc]);
+
   if (!token) return <LoginGate />;
   return <ExamShell />;
 }
@@ -89,7 +99,11 @@ function ExamShell() {
   // SP-2b: tải sẵn đề (đã trộn) NGAY khi 'ready' để 'Bắt đầu' vào tức thì + rải cú
   // tải suốt thời gian chờ. staleTime Infinity → không tải lại khi vào in_progress.
   const prefetch = useQuery({
-    queryKey: ["questions"],
+    // AD-90d: khoá theo PHIÊN. Trước đây khoá chung ["questions"] + staleTime vô hạn
+    // → máy KHÔNG tải lại trang (thí sinh kế đăng nhập trên cùng trình duyệt, hoặc
+    // buổi mới mở) vẫn dùng lại ĐỀ CŨ còn nằm trong bộ nhớ trang. Mỗi buổi là một
+    // phiên khác nhau nên khoá theo session_id là hết sạch nguy cơ lẫn đề.
+    queryKey: ["questions", state?.session_id],
     queryFn: examApi.questions,
     enabled: !!state?.session_id && (state?.status === "ready" || state?.status === "in_progress"),
     staleTime: Infinity,
