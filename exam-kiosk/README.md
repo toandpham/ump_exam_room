@@ -14,8 +14,14 @@ tab/cửa sổ mới, devtools…), NHƯNG **Ctrl+Alt+Del** là ranh giới Wind
 user-mode không chặn tuyệt đối. ⇒ **Vẫn cần giám thị coi thi.**
 
 ## Thoát app
-- **Thường:** chủ tịch bấm "Thoát tất cả máy thi" trên trang quản trị → các máy tự
-  đóng trong ~5s.
+- **KHÔNG khởi động lại máy** (AD-93). Thoát = đóng app, hiện lại desktop/taskbar đang
+  chạy. (Bản 1.2.0 trở về trước thì `shutdown /r` — đã bỏ vì rủi ro restart nhầm máy
+  đang thi.) Lưu ý nhỏ: mục **Shut down / Log off trong Start menu** bị policy ẩn trong
+  lúc thi chỉ hiện lại sau lần đăng nhập kế; tắt máy vẫn làm được bằng **Ctrl+Alt+Del**
+  (nút nguồn đã khôi phục) hoặc **Alt+F4** ngoài desktop.
+- **Thường:** chủ tịch bấm "Khởi động lại máy thi"/"Thoát máy thi" trên trang quản trị →
+  các máy tự đóng app trong ~5s. Máy chủ TỪ CHỐI lệnh này khi còn thí sinh đang làm bài
+  (AD-92).
 - **Khẩn cấp (khi server/mạng hỏng):** Ctrl+Alt+Shift+Q → hiện **cửa sổ nhập mật khẩu
   riêng do app tạo** (không phụ thuộc trang đang mở, nên vẫn thoát được kể cả khi đã vào
   trang thi và mất kết nối server) → mật khẩu (mặc định `ump@2026`, ĐỔI trước production).

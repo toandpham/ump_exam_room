@@ -28,7 +28,7 @@ export const examsApi = {
   // Archive the exam (force-submit running buổi, close) so a new one can be created.
   close: async (id: string): Promise<{ submitted: number }> =>
     (await api.post(`/admin/exams/${id}/close`)).data,
-  /** Gửi lệnh thoát tới mọi máy thi — MÁY SẼ KHỞI ĐỘNG LẠI (AD-77c/AD-92).
+  /** Gửi lệnh ĐÓNG phần mềm thi trên mọi máy (AD-93 — không còn khởi động lại máy).
    * Máy chủ từ chối (409) khi còn thí sinh đang làm bài; `force` để vẫn gửi. */
   kioskQuit: async (examId: string, force = false): Promise<{ ok: boolean; ttl: number }> =>
     (await api.post(`/admin/exams/${examId}/kiosk-quit`, null, { params: { force } })).data,

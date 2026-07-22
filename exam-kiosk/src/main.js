@@ -2,7 +2,7 @@
 const { app, BrowserWindow, ipcMain, globalShortcut, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const { execFile, execFileSync, spawn } = require("child_process");
+const { execFileSync, spawn } = require("child_process");
 
 const { loadConfig } = require("./config");
 const { discoverServer, queryMdns, healthCheck } = require("./discovery");
@@ -97,19 +97,16 @@ function setTaskMgr(disabled) {   // tên giữ nguyên cho các call site; nay 
   try { execFileSync("reg", suArgs, { stdio: "ignore" }); } catch { /* ignore */ }
 }
 
-// AD-77c — KHI THOÁT thì KHỞI ĐỘNG LẠI MÁY, không cố "khôi phục" desktop.
-// Lịch sử màn hình lỗi trên Win11 khi thoát: (1) taskkill explorer + spawn lại →
-// explorer bị ELEVATED không vẽ được = MÀN ĐEN; (2) chỉ taskkill cậy
-// AutoRestartShell → shell không lên = MÀN XANH TRỐNG. Cả hai đều do cố đụng vào
-// shell. Giải pháp chắc chắn (user xác nhận "restart xong là bình thường hết"):
-// gỡ policy khoá rồi `shutdown /r` → boot lại là desktop/taskbar/mọi thứ sạch sẽ,
-// không lỗi trên bất kỳ Win7→11 nào. setTaskMgr(false) chạy TRƯỚC reboot để nếu
-// vì lý do gì reboot không diễn ra thì máy vẫn không bị kẹt khoá.
-function rebootMachine() {
-  if (process.platform !== "win32") return;   // Mac/dev: chỉ thoát app
-  // /r = restart, /f = ép đóng app đang chạy, /t 0 = ngay lập tức.
-  try { execFileSync("shutdown", ["/r", "/f", "/t", "0"], { stdio: "ignore" }); } catch { /* ignore */ }
-}
+// AD-93 — THOÁT KIOSK = ĐÓNG APP, TUYỆT ĐỐI KHÔNG khởi động lại máy.
+// Lịch sử: AD-77c từng cho `shutdown /r` khi thoát (vì hai lần cố "khôi phục"
+// desktop bằng cách đụng vào explorer đều hỏng trên Win11: taskkill+spawn lại →
+// explorer bị ELEVATED = màn đen; chỉ taskkill → shell không lên = màn xanh).
+// NHƯNG restart là rủi ro KHÔNG chấp nhận được cho phòng đang thi (yêu cầu vận
+// hành 22-07). Nay: chỉ gỡ policy khoá + tắt app → hiện lại desktop/taskbar vốn
+// vẫn đang chạy (app KHÔNG hề tắt explorer nữa từ AD-77c) — không đụng gì tới
+// Windows. LƯU Ý còn lại: mấy mục Start menu bị ẩn theo policy (Shut down / Log
+// off) chỉ hiện lại sau lần đăng nhập kế; tắt máy vẫn làm được bằng Ctrl+Alt+Del
+// (nút nguồn đã được khôi phục) hoặc Alt+F4 ngoài desktop.
 
 let win = null;
 let emergencyWin = null; // cửa sổ thoát khẩn cấp (sở hữu bởi main, độc lập trang thi)
@@ -233,10 +230,9 @@ function quitKiosk() {
   closeEmergencyWindow();
   stopKeyBlocker();
   if (stopPolling) stopPolling();
-  setTaskMgr(false);   // gỡ policy khoá TRƯỚC khi reboot → máy về bình thường sau boot
+  setTaskMgr(false);   // gỡ policy khoá (Task Manager, khoá máy, nút nguồn…) — ĐỒNG BỘ
   markLockdown(false);
-  rebootMachine();     // AD-77c — reboot thay vì cố khôi phục desktop (tránh màn đen/xanh Win11)
-  app.quit();
+  app.quit();          // AD-93: KHÔNG reboot — chỉ đóng app, trả lại desktop đang chạy
 }
 
 let manualRetryTimer = null; // tự tìm lại nền khi đang kẹt màn nhập IP
