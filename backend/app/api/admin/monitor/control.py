@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import exam_for_admin, sitting_for_admin
@@ -194,12 +194,32 @@ KIOSK_WIPE_TTL_SECONDS = 300   # SP-4: đủ lâu để máy reconnect trong 5' 
 @router.post("/exams/{exam_id}/kiosk-quit")
 async def kiosk_quit(
     exam_id: uuid.UUID,
+    force: bool = False,
     db: AsyncSession = Depends(get_db),
     admin: Admin = Depends(_require_proctor),
 ) -> dict:
     """Thoát tất cả máy thi: set a short-lived Redis flag that every kiosk machine
-    of this exam polls (GET /api/exam/kiosk/command). Ownership-gated (AD-30)."""
+    of this exam polls (GET /api/exam/kiosk/command). Ownership-gated (AD-30).
+
+    LƯU Ý: máy nhận lệnh này sẽ **KHỞI ĐỘNG LẠI** (AD-77c: thoát kiosk = reboot để
+    Windows trả lại desktop sạch). Vì vậy AD-92 chặn cứng khi CÒN NGƯỜI ĐANG THI —
+    một cú bấm nhầm sẽ reboot toàn bộ phòng đang làm bài. Muốn vẫn gửi (máy treo,
+    cần dọn phòng gấp) thì gọi lại với ``force=true``.
+    """
     await exam_for_admin(db, exam_id, admin)  # ownership gate (404 if not owner)
+    if not force:
+        running = await db.scalar(
+            select(func.count(ExamSession.id)).where(
+                ExamSession.exam_id == exam_id,
+                ExamSession.status == SessionStatus.IN_PROGRESS.value,
+            )
+        ) or 0
+        if running:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Còn {running} thí sinh ĐANG LÀM BÀI — lệnh này sẽ khởi động lại máy "
+                "của họ. Hãy chờ nộp xong (hoặc đóng buổi thi) rồi mới thoát máy.",
+            )
     await redis_client.set(
         session_service.kiosk_quit_key(exam_id), "1", ex=KIOSK_QUIT_TTL_SECONDS)
     db.add(session_service.make_event(

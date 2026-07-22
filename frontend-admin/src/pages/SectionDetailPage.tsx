@@ -37,9 +37,12 @@ export default function SectionDetailPage() {
     },
   });
 
+  // AD-92: lệnh này làm MÁY THI KHỞI ĐỘNG LẠI (thoát kiosk = reboot, AD-77c). Trước
+  // đây chữ trên nút + hộp thoại chỉ nói "tự đóng" nên chủ tịch bấm mà không ngờ máy
+  // restart → thí sinh tưởng máy tự tắt (sự cố 22-07).
   const kioskQuitMut = useMutation({
-    mutationFn: () => examsApi.kioskQuit(examId),
-    onSuccess: () => alert("Đã gửi lệnh thoát. Các máy thi sẽ tự đóng trong ~5 giây."),
+    mutationFn: (force: boolean) => examsApi.kioskQuit(examId, force),
+    onSuccess: () => alert("Đã gửi lệnh. Các máy thi sẽ KHỞI ĐỘNG LẠI trong ~5 giây."),
     onError: (e) => alert(errorMessage(e, "Gửi lệnh thoát máy thi thất bại")),
   });
 
@@ -75,13 +78,17 @@ export default function SectionDetailPage() {
                 <button
                   onClick={() => {
                     if (confirm(
-                      "Thoát tất cả máy thi?\n\nLệnh đóng sẽ gửi tới mọi máy thi của kỳ thi này (các máy tự đóng trong khoảng 5 giây). Dùng khi đã kết thúc thi.",
-                    )) kioskQuitMut.mutate();
+                      "KHỞI ĐỘNG LẠI tất cả máy thi?\n\n" +
+                      "⚠️ Mọi máy thi của kỳ thi này sẽ TỰ KHỞI ĐỘNG LẠI (restart Windows) " +
+                      "trong khoảng 5 giây — kể cả máy đang mở màn hình kết quả.\n\n" +
+                      "CHỈ dùng khi cả phòng đã nộp bài xong và cần dọn máy. " +
+                      "Nếu còn thí sinh đang làm bài, hệ thống sẽ từ chối.",
+                    )) kioskQuitMut.mutate(false);
                   }}
                   disabled={kioskQuitMut.isPending}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 disabled:opacity-60"
                 >
-                  <Monitor size={15} /> {kioskQuitMut.isPending ? "Đang gửi…" : "Thoát máy thi"}
+                  <Monitor size={15} /> {kioskQuitMut.isPending ? "Đang gửi…" : "Khởi động lại máy thi"}
                 </button>
               )}
             </div>
