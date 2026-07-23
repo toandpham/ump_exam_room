@@ -174,11 +174,12 @@ async def test_export_excel_no_questions(factory, db):
     assert wb.sheetnames == ["Kết quả", "Đáp án"]
 
 
-async def test_report_orders_questions_by_code_number(client, factory, db):
-    """Cột câu hỏi sắp theo SỐ ở cuối mã câu (Q-1..Q-n) thay vì thứ tự item-ref
-    trong file test XML — nhà cung cấp hay xuất test xml xáo trộn (13-07:
-    item_Q-153, item_Q-81… trong khi cấu trúc đề là Q-1→Q-n). Đáp án thí sinh
-    phải dịch cột theo đúng thứ tự mới."""
+async def test_report_keeps_qti_file_order(client, factory, db):
+    """Cột câu hỏi GIỮ ĐÚNG thứ tự trong file QTI (thứ tự item-ref =
+    order_index = report_snapshot), KHÔNG sắp lại theo số ở mã câu. Dù mã câu
+    "xáo trộn" (item_Q-153, item_Q-2, item_Q-81) thì báo cáo vẫn đi đúng thứ tự
+    người ra đề đặt trong file. Đáp án thí sinh map theo question_id nên đối
+    chiếu vẫn đúng."""
     admin, ptok = await factory.admin()
     exam, sitting, payload = await factory.active_exam(
         [{"text": "QA", "correct": "A", "code": "item_Q-153"},
@@ -199,20 +200,10 @@ async def test_report_orders_questions_by_code_number(client, factory, db):
     await client.post("/api/exam/submit", headers=ch)
 
     report = await report_service.build_report(db, sitting, exam.name)
-    assert [q["code"] for q in report["questions"]] == ["item_Q-2", "item_Q-81", "item_Q-153"]
-    assert [q["correct_option"] for q in report["questions"]] == ["B", "C", "A"]
+    # Thứ tự y như file: câu 1 = mã 153, câu 2 = mã 2, câu 3 = mã 81.
+    assert [q["code"] for q in report["questions"]] == ["item_Q-153", "item_Q-2", "item_Q-81"]
+    assert [q["correct_option"] for q in report["questions"]] == ["A", "B", "C"]
     assert [q["index"] for q in report["questions"]] == [1, 2, 3]
-    # Đáp án thí sinh bám theo cột đã sắp: chọn D ở câu mã 153 → cột CUỐI.
+    # Đáp án thí sinh: chọn D ở câu mã 153 = câu ĐẦU → cột đầu tiên.
     row = next(r for r in report["rows"] if r["cccd"] == cand.cccd)
-    assert row["answers"] == ["", "", "D"]
-
-
-async def test_report_keeps_order_when_codes_not_numeric(factory, db):
-    """Đề không có mã (hoặc mã không kết thúc bằng số) → giữ nguyên thứ tự gốc."""
-    admin, _ = await factory.admin()
-    exam, sitting, _ = await factory.active_exam(
-        [{"text": "Q1", "correct": "A"}, {"text": "Q2", "correct": "B"}],
-        owner_id=admin.id,
-    )
-    report = await report_service.build_report(db, sitting, exam.name)
-    assert [q["correct_option"] for q in report["questions"]] == ["A", "B"]
+    assert row["answers"] == ["D", "", ""]

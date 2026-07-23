@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import io
 import json
-import re
 from collections import defaultdict
 from datetime import date as date_type
 
@@ -19,15 +18,6 @@ from app.models.room import Room
 from app.services import session_service
 
 _SUBMITTED = (SessionStatus.SUBMITTED.value, SessionStatus.TIMEOUT.value)
-
-_TRAILING_NUM = re.compile(r"(\d+)\s*$")
-
-
-def _code_number(code: str) -> int | None:
-    """Số ở CUỐI mã câu hỏi ("item_Q-153" → 153, "111101" → 111101); None nếu
-    mã không kết thúc bằng số — dùng sắp cột báo cáo theo cấu trúc đề Q-1..Q-n."""
-    m = _TRAILING_NUM.search(code or "")
-    return int(m.group(1)) if m else None
 
 
 async def get_answer_key(redis, sitting) -> dict[str, dict]:
@@ -68,15 +58,12 @@ async def build_report(db: AsyncSession, sitting, exam_name: str = "") -> dict:
     """
     from app.core.redis import redis_client
     answer_key = await get_answer_key(redis_client, sitting)
-    # Cột câu hỏi sắp theo SỐ ở cuối mã câu (Q-1..Q-n) — nhà cung cấp hay xuất
-    # file test XML với item-ref xáo trộn nên thứ tự snapshot không phải "cấu
-    # trúc đề" người đọc muốn tra (13-07). Chỉ sắp khi MỌI câu đều có mã kết
-    # thúc bằng số; đề không mã giữ nguyên thứ tự gốc. Đáp án map theo
-    # question_id nên đổi thứ tự cột không ảnh hưởng điểm/đối chiếu.
+    # Cột câu hỏi giữ ĐÚNG THỨ TỰ TRONG FILE QTI (theo thứ tự item-ref của
+    # qti-assessment-test → order_index → report_snapshot). Trước đây (AD-73) sắp
+    # đè theo số ở cuối mã câu (Q-1..Q-n); nay bỏ, dùng thẳng thứ tự file như hội
+    # đồng yêu cầu. Đáp án thí sinh map theo question_id nên đối chiếu vẫn đúng dù
+    # thứ tự cột thế nào.
     items = list(answer_key.items())
-    order_keys = [_code_number(v.get("code", "")) for _, v in items]
-    if items and all(k is not None for k in order_keys):
-        items.sort(key=lambda kv: _code_number(kv[1].get("code", "")))
     qids = [qid for qid, _ in items]
     questions = [
         {"index": i + 1, "code": v.get("code", ""), "correct_option": v["correct_option"]}
