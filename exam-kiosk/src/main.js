@@ -11,14 +11,52 @@ const { checkForUpdate, fetchText, downloadFile } = require("./updater");
 const { isBlockedKey, KIOSK_WINDOW_OPTS } = require("./lockdown");
 const { handleEmergencyVerify } = require("./quit");
 
-// --- Tắt tăng tốc GPU ---
-// Một số máy Win10 (driver đồ hoạ cũ, vd Acer/Intel tích hợp) làm Chromium crash
-// ngay lúc khởi tạo ANGLE/Direct3D → Application Error 0x80000003 (app mở không
-// lên). Tắt tăng tốc GPU để render bằng CPU (SwiftShader) — app này nhẹ nên không
-// ảnh hưởng hiệu năng. PHẢI gọi trước khi app sẵn sàng (ngay đầu module).
-app.disableHardwareAcceleration();
-app.commandLine.appendSwitch("disable-gpu");
-app.commandLine.appendSwitch("disable-gpu-compositing");
+// --- vị trí file cạnh app (portable) ---
+function appDir() {
+  return process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(app.getPath("exe"));
+}
+const cfg = loadConfig(path.join(appDir(), "kiosk.config.json"));
+
+// --- Tăng tốc GPU (AD-95) ---
+// TRƯỚC ĐÂY (AD-66) tắt cứng GPU → Chromium vẽ MỌI THỨ bằng CPU (SwiftShader).
+// Trên máy thi yếu (Win7/4GB) đây là nguyên nhân GIẬT LAG chính: cùng máy đó
+// Chrome (bật GPU) chạy mượt, kiosk (tắt GPU) thì ì ạch. Lý do tắt ngày xưa là
+// MỘT SỐ máy Win10 driver cũ crash lúc khởi tạo Direct3D (0x80000003) — không phải
+// tất cả. Nên nay: BẬT GPU mặc định (mượt), kèm cơ chế TỰ DÒ — nếu lần chạy có GPU
+// bị crash thì tự đánh dấu và các lần sau tắt GPU cho riêng máy đó, không cần IT
+// đụng tay. Máy nào muốn ép tắt: đặt "disableGpu": true trong kiosk.config.json.
+//
+// Cơ chế tự dò (self-heal): ghi cờ "đang thử GPU" TRƯỚC khi mở cửa sổ; xoá khi
+// cửa sổ hiển thị được lần đầu. Nếu lần khởi động sau vẫn thấy cờ đó (lần trước
+// crash trước khi kịp hiển thị) → kết luận GPU hỏng → ghi cờ "GPU off" vĩnh viễn
+// (cho tới khi xoá file) và tắt GPU.
+const gpuOffFile = path.join(app.getPath("userData"), "gpu-off.flag");
+const gpuProbeFile = path.join(app.getPath("userData"), "gpu-probing.flag");
+function fileExists(p) { try { return fs.existsSync(p); } catch { return false; } }
+function markGpuBad() { try { fs.writeFileSync(gpuOffFile, String(Date.now())); } catch { /* ignore */ } }
+
+let gpuDisabled = false;
+function disableGpuNow(reason) {
+  if (gpuDisabled) return;
+  gpuDisabled = true;
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch("disable-gpu");
+  app.commandLine.appendSwitch("disable-gpu-compositing");
+  console.error(`[KIOSK] GPU TẮT (render bằng CPU). Lý do: ${reason}`);
+}
+if (cfg.disableGpu) {
+  disableGpuNow("cấu hình disableGpu=true");
+} else if (fileExists(gpuOffFile)) {
+  disableGpuNow("máy này từng crash GPU — đã đánh dấu tắt");
+} else if (fileExists(gpuProbeFile)) {
+  // Lần thử GPU trước KHÔNG hoàn tất (app chết trước khi cửa sổ hiện) → GPU hỏng.
+  markGpuBad();
+  disableGpuNow("lần thử GPU trước bị crash — chuyển hẳn sang CPU");
+} else {
+  // Để GPU BẬT (mặc định Electron). Ghi cờ thử; sẽ xoá khi cửa sổ hiện được.
+  try { fs.writeFileSync(gpuProbeFile, String(Date.now())); } catch { /* ignore */ }
+}
+function clearGpuProbe() { try { fs.existsSync(gpuProbeFile) && fs.unlinkSync(gpuProbeFile); } catch { /* ignore */ } }
 
 // --- Khởi động được trên Win10 có phần mềm bảo mật chèn DLL ---
 // Nhiều máy Win10 (AV/endpoint chèn DLL chưa ký vào tiến trình Chromium) crash
@@ -33,11 +71,6 @@ app.commandLine.appendSwitch("disable-features", "RendererCodeIntegrity");
 // nhận từ splash + server thuộc LAN tin cậy. Thử gỡ lại khi đổi thế hệ máy thi.
 app.commandLine.appendSwitch("no-sandbox");
 
-// --- vị trí file cạnh app (portable) ---
-function appDir() {
-  return process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(app.getPath("exe"));
-}
-const cfg = loadConfig(path.join(appDir(), "kiosk.config.json"));
 const cacheFile = path.join(app.getPath("userData"), "last-ip.json");
 // Sentinel: ghi khi ĐÃ áp lockdown registry, xoá khi khôi phục sạch. Nếu còn sót lúc
 // khởi động (lần chạy trước crash/bị kill) → tự khôi phục registry trước khi áp lại.
@@ -414,6 +447,9 @@ function createWindow() {
   win.loadFile(path.join(__dirname, "splash.html"));
   win.webContents.on("did-finish-load", () => {
     const url = win.webContents.getURL();
+    // AD-95: cửa sổ đã hiển thị được → GPU (nếu bật) khởi tạo OK → xoá cờ "đang thử".
+    // Nhờ vậy lần khởi động sau KHÔNG nhầm là crash mà tắt GPU oan.
+    clearGpuProbe();
     // AD-76: khoá zoom Ctrl+lăn-chuột (phím Ctrl+/- đã chặn nhưng wheel thì chưa
     // — thí sinh zoom vỡ layout đề).
     try { win.webContents.setVisualZoomLevelLimits(1, 1); } catch (_e) { /* ignore */ }
@@ -471,6 +507,11 @@ if (!app.requestSingleInstanceLock()) {
     // vẫn thi được — header này là đường nhận diện chính cho bản mới.
     session.defaultSession.webRequest.onBeforeSendHeaders((details, cb) => {
       cb({ requestHeaders: { ...details.requestHeaders, "X-Exam-Kiosk": app.getVersion() } });
+    });
+    // AD-95: tiến trình GPU chết (driver lỗi) → đánh dấu tắt GPU cho LẦN SAU. Không
+    // relaunch giữa chừng (Chromium tự lùi về CPU) — chỉ để boot kế sạch sẽ.
+    app.on("child-process-gone", (_e, d) => {
+      if (d && d.type === "GPU" && d.reason && d.reason !== "clean-exit") markGpuBad();
     });
     // Tự khôi phục sau crash: nếu lần chạy trước để sót lockdown (sentinel còn) → gỡ trước.
     if (sentinelExists()) setTaskMgr(false);

@@ -1,6 +1,6 @@
 {
   "name": "exam-kiosk",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Trình duyệt thi khoá màn hình cho Windows 7→11 — AD-66/76",
   "main": "src/main.js",
   "scripts": {

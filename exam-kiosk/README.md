@@ -35,6 +35,16 @@ user-mode không chặn tuyệt đối. ⇒ **Vẫn cần giám thị coi thi.**
   để sót lockdown, lần khởi động sau phát hiện sentinel → **tự khôi phục registry** trước
   khi áp lại. Nhờ vậy máy không bị kẹt với Task Manager bị tắt sau một lần app chết.
 
+## Hiệu năng: tăng tốc GPU (AD-95)
+- Từ **v1.4.0** GPU được **BẬT mặc định** → mượt hơn nhiều trên máy yếu (Win7/4GB).
+  Bản cũ tắt cứng GPU (vẽ mọi thứ bằng CPU) là nguyên nhân giật lag: cùng máy đó
+  Chrome chạy mượt vì có GPU, còn kiosk thì ì ạch.
+- **Máy driver GPU lỗi (hiếm):** app **tự dò** — nếu bật GPU mà crash lúc mở, lần
+  khởi động sau tự chuyển sang vẽ bằng CPU cho RIÊNG máy đó (ghi cờ `gpu-off.flag`
+  trong `userData`), không cần IT can thiệp. Muốn ép tắt tay: đặt `"disableGpu": true`
+  trong `kiosk.config.json`. Muốn thử bật lại GPU cho một máy đã tự tắt: xoá file
+  `gpu-off.flag` trong thư mục `userData` của app.
+
 ## Kiosk tìm server ở đâu?
 Thứ tự: **IP đã nhớ (lần trước) → IP cấu hình sẵn (`serverIp`) → mDNS `exam-server.local`
 → nhập IP tay**. Có 3 cách để kiosk ra được server:

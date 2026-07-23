@@ -8,5 +8,7 @@
   "_emergencyPassword": "Mật khẩu thoát KHẨN CẤP (Ctrl+Alt+Shift+Q). ĐỔI trước khi phát cho máy thi.",
   "controlPollMs": 5000,
   "_controlPollMs": "Nhịp poll lệnh 'Thoát tất cả máy thi' từ server (ms). Kẹp trong [2000..60000].",
-  "discoveryTimeoutMs": 5000
+  "discoveryTimeoutMs": 5000,
+  "disableGpu": false,
+  "_disableGpu": "false = BẬT tăng tốc GPU (mượt hơn nhiều trên máy yếu). Chỉ đặt true nếu máy này bật GPU bị lỗi (màn trắng/đen, không mở được) — nhưng app đã TỰ dò và tự tắt cho máy lỗi nên hầu như không cần đặt tay."
 }

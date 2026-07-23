@@ -11,6 +11,10 @@ const DEFAULTS = {
   emergencyPassword: "ump@2026",    // mật khẩu thoát KHẨN CẤP (đổi trước production)
   discoveryTimeoutMs: 5000,         // timeout tìm server
   controlPollMs: 5000,              // nhịp poll lệnh thoát từ server
+  disableGpu: false,                // AD-95: true = ép vẽ bằng CPU (SwiftShader).
+                                    // Mặc định false = BẬT GPU (mượt hơn nhiều trên
+                                    // máy yếu). Đặt true cho máy nào bật GPU bị lỗi
+                                    // (app tự phát hiện + tự tắt nên hiếm khi cần).
 };
 
 function loadConfig(filePath, readFile = fs.readFileSync) {
@@ -33,6 +37,7 @@ function loadConfig(filePath, readFile = fs.readFileSync) {
   cfg.serverHost = String(cfg.serverHost || DEFAULTS.serverHost);
   cfg.serverIp = String(cfg.serverIp ?? "").trim();   // "" = không đặt (chỉ mDNS)
   cfg.path = String(cfg.path || DEFAULTS.path);
+  cfg.disableGpu = cfg.disableGpu === true;   // chỉ true khi khai đúng boolean true
   return cfg;
 }
 
