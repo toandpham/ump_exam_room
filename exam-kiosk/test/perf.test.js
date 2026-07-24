@@ -49,6 +49,14 @@ test("config: disableKeyblocker mặc định false, chỉ true khi khai đúng 
   assert.strictEqual(loadConfig("x", () => JSON.stringify({ disableKeyblocker: "true" })).disableKeyblocker, false);
 });
 
+test("main.js: nâng ưu tiên CPU app thi (AD-106) — main HIGH, con ABOVE_NORMAL, gọi định kỳ", () => {
+  const src = fs.readFileSync(require.resolve("../src/main.js"), "utf8");
+  assert.match(src, /os\.setPriority\(process\.pid, os\.constants\.priority\.PRIORITY_HIGH\)/);
+  assert.match(src, /PRIORITY_ABOVE_NORMAL/);
+  assert.match(src, /setInterval\(boostPriorities, 30000\)/);
+  assert.match(src, /boostPriorities\(\);/);   // gọi ngay lúc lên, không chỉ theo timer
+});
+
 test("main.js: keyblocker có công tắc + perf được nối", () => {
   const src = fs.readFileSync(require.resolve("../src/main.js"), "utf8");
   // Chỉ chạy keyblocker khi KHÔNG disable (A/B chẩn đoán).

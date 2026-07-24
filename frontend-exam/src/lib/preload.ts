@@ -17,10 +17,12 @@
  */
 
 /** Số câu ĐẦU đề được nạp ảnh ngay khi đề sẵn sàng. */
-export const PREFETCH_QUESTIONS = 8;
+export const PREFETCH_QUESTIONS = 12;
 
-/** Số câu KẾ TIẾP được nạp ảnh trước khi thí sinh tới. */
-export const PRELOAD_AHEAD = 3;
+/** Số câu KẾ TIẾP được nạp ảnh trước khi thí sinh tới. (AD-106: 3→6 — hiện trường
+ * báo "hình lúc nhanh lúc chậm" = thí sinh đi nhanh hơn luồng nạp; ảnh đã thu nhỏ
+ * ~80KB nên nạp trước 6 câu vẫn nhẹ mạng.) */
+export const PRELOAD_AHEAD = 6;
 
 /** Số ảnh tải song song ở luồng "tải ngay". */
 const CONCURRENCY = 2;

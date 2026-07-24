@@ -10,6 +10,7 @@ const { startPolling, fetchCommand } = require("./control");
 const { checkForUpdate, fetchText, downloadFile } = require("./updater");
 const { isBlockedKey, keepOnTopActions, KIOSK_WINDOW_OPTS } = require("./lockdown");
 const { createPerf } = require("./perf");
+const os = require("os");
 const { handleEmergencyVerify } = require("./quit");
 
 // --- vị trí file cạnh app (portable) ---
@@ -221,6 +222,22 @@ function openEmergencyWindow() {
 function closeEmergencyWindow() {
   if (emergencyWin && !emergencyWin.isDestroyed()) { try { emergencyWin.close(); } catch { /* ignore */ } }
   emergencyWin = null;
+}
+
+// --- Ưu tiên CPU cho app thi (AD-106, vá lag máy yếu đợt 2) ---
+// Máy thi chỉ chạy MỘT ứng dụng là kiosk, nhưng Windows xếp nó ưu tiên thường nên
+// trên máy yếu nó bị AV/dịch vụ nền bỏ đói — mà MỌI phím + chuột đều phải qua tiến
+// trình chính rồi mới tới trang. Nâng: tiến trình chính = HIGH (như keyblocker,
+// AD-104); các tiến trình con (renderer/GPU — vẽ trang, giải mã ảnh) = ABOVE_NORMAL.
+// Gọi lại định kỳ vì tiến trình con có thể sinh lại (GPU crash, reload trang).
+function boostPriorities() {
+  try { os.setPriority(process.pid, os.constants.priority.PRIORITY_HIGH); } catch { /* ignore */ }
+  try {
+    for (const m of app.getAppMetrics()) {
+      if (m.pid === process.pid) continue;
+      try { os.setPriority(m.pid, os.constants.priority.PRIORITY_ABOVE_NORMAL); } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
 }
 
 // --- Bộ chặn phím native (Win/Alt+Tab/Ctrl+Esc…) ---
@@ -541,6 +558,10 @@ if (!app.requestSingleInstanceLock()) {
     // BẤT THƯỜNG (stall/keygap) nên file nhỏ; đọc sau khi thoát kiosk.
     perf = createPerf({ file: path.join(app.getPath("userData"), "perf.log") });
     perf.start(`v${app.getVersion()} keyblocker=${cfg.disableKeyblocker ? "off" : "on"} gpu=${gpuDisabled ? "off" : "on"}`);
+    // AD-106: ưu tiên CPU cho app thi — ngay khi lên + định kỳ (con sinh lại).
+    boostPriorities();
+    const boostTimer = setInterval(boostPriorities, 30000);
+    if (boostTimer.unref) boostTimer.unref();
     // Đăng ký nuốt mọi tổ hợp có thể ở tầng hệ thống (best-effort: một số tổ hợp
     // Windows giữ riêng — RegisterHotKey sẽ thất bại, ta bỏ qua; tuyến chính vẫn là
     // refocus() ở trên).
