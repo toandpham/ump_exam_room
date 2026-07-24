@@ -19,3 +19,26 @@
     @apply w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white;
   }
 }
+
+/* AD-112: chế độ GIẢN LƯỢC cho máy yếu (class `lite` gắn vào <html> lúc boot,
+   xem lib/lite.ts). Cắt đúng những thứ tốn công VẼ — máy phải vẽ đi vẽ lại khi
+   rê chuột/cuộn/đổi câu: đổ bóng (box-shadow), transition, animation, filter.
+   Bố cục/màu/nút giữ nguyên. Đặt NGOÀI @layer để thắng mọi utility Tailwind. */
+.lite *,
+.lite *::before,
+.lite *::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  transition: none !important;
+  animation: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+}
+.lite {
+  scroll-behavior: auto !important;
+}
+/* Nền mờ đen của lightbox: alpha phủ toàn màn bắt máy trộn màu cả trang phía
+   sau — máy yếu dùng đen đặc cho nhẹ. */
+.lite .bg-black\/85 {
+  background-color: #000 !important;
+}
