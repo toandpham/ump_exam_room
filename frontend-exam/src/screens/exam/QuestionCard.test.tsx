@@ -52,4 +52,25 @@ describe("QuestionCard", () => {
     );
     expect(mid.container.textContent).toContain("Câu sau");
   });
+
+  it("AD-98: render khối theo ĐÚNG thứ tự file (chữ → ảnh → câu hỏi)", () => {
+    const q: ExamQuestion = {
+      ...Q, text: "Xét nghiệm.\nChẩn đoán nào?", images: ["/uploads/x.jpg"],
+      blocks: [
+        { type: "text", src: "", text: "Xét nghiệm cận lâm sàng." },
+        { type: "image", src: "/uploads/x.jpg" },
+        { type: "text", src: "", text: "Chẩn đoán nào sau đây?" },
+      ],
+    };
+    const { container } = render(
+      <QuestionCard q={q} index={0} total={1} answers={{}} unansweredCount={0}
+        onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+    );
+    // Ảnh phải nằm GIỮA hai đoạn chữ (không dồn xuống cuối).
+    const nodes = Array.from(container.querySelectorAll("p, img"));
+    const kinds = nodes
+      .filter((n) => n.tagName === "IMG" || (n.textContent || "").includes("nghiệm") || (n.textContent || "").includes("Chẩn đoán nào sau"))
+      .map((n) => (n.tagName === "IMG" ? "img" : "text"));
+    expect(kinds).toEqual(["text", "img", "text"]);
+  });
 });

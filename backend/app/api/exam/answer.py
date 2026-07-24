@@ -19,6 +19,7 @@ from app.schemas.answer import (
     AnswerOut,
     AnswersBulkIn,
     AnswersBulkOut,
+    ExamBlock,
     ExamQuestion,
     ExamQuestionOption,
     ExamQuestionsOut,
@@ -135,10 +136,23 @@ async def get_questions(
             )
             for oid in ordered_ids
         ]
+        q_images = _images(q)
+        # Khối có thứ tự (AD-98): khối ảnh mang ``index`` trỏ vào ``images`` → đổi
+        # thành URL đã materialize. Đề cũ không có ``blocks`` → để rỗng, FE lùi về
+        # hiển thị text rồi images như trước.
+        blocks: list[ExamBlock] = []
+        for b in q.get("blocks") or []:
+            if b.get("type") == "image":
+                idx = b.get("index", 0)
+                if 0 <= idx < len(q_images):
+                    blocks.append(ExamBlock(type="image", src=q_images[idx]))
+            elif b.get("text"):
+                blocks.append(ExamBlock(type="text", text=b["text"]))
         questions.append(ExamQuestion(
             id=qid,
             text=q["text"],
-            images=_images(q),
+            images=q_images,
+            blocks=blocks,
             options=options,
         ))
 

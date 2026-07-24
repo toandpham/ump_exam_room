@@ -30,17 +30,36 @@ function QuestionCard({
           <h2 className="text-sm font-semibold text-slate-500">Câu {index + 1}/{total}</h2>
         </div>
 
-        {/* Câu hỏi: ưu tiên — chữ to, rõ (AD-69) */}
-        <p className="text-slate-900 text-lg leading-relaxed font-medium mb-4 whitespace-pre-wrap">{q.text}</p>
-        {q.images && q.images.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-5">
-            {q.images.map((src, i) => (
-              <img key={i} src={src} onClick={() => setZoom(src)}
-                loading="lazy" decoding="async"
-                title="Bấm để phóng to"
-                className="max-h-72 rounded border cursor-zoom-in hover:opacity-90" />
-            ))}
+        {/* Nội dung câu hỏi. AD-98: nếu có `blocks` (đề nạp mới) → render chữ ↔ ảnh
+            ĐÚNG THỨ TỰ trong file QTI (vd: xét nghiệm → hình → câu hỏi). Đề cũ không
+            có blocks → lùi về hiển thị toàn bộ chữ rồi ảnh (như trước). */}
+        {q.blocks && q.blocks.length > 0 ? (
+          <div className="mb-4">
+            {q.blocks.map((b, i) =>
+              b.type === "image" && b.src ? (
+                <img key={i} src={b.src} onClick={() => setZoom(b.src!)}
+                  loading="lazy" decoding="async" title="Bấm để phóng to"
+                  className="max-h-72 rounded border cursor-zoom-in hover:opacity-90 my-3" />
+              ) : (
+                <p key={i} className="text-slate-900 text-lg leading-relaxed font-medium whitespace-pre-wrap">{b.text}</p>
+              )
+            )}
           </div>
+        ) : (
+          <>
+            {/* Câu hỏi: ưu tiên — chữ to, rõ (AD-69) */}
+            <p className="text-slate-900 text-lg leading-relaxed font-medium mb-4 whitespace-pre-wrap">{q.text}</p>
+            {q.images && q.images.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-5">
+                {q.images.map((src, i) => (
+                  <img key={i} src={src} onClick={() => setZoom(src)}
+                    loading="lazy" decoding="async"
+                    title="Bấm để phóng to"
+                    className="max-h-72 rounded border cursor-zoom-in hover:opacity-90" />
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {/* Đáp án: nhỏ lại để nhường chỗ cho câu hỏi (AD-69) */}

@@ -47,3 +47,31 @@ def test_no_blank_lines_between_paragraphs():
     text, _ = _extract_text_and_images(
         ET.fromstring('<div><p>Dòng 1</p><p>Dòng 2</p></div>'), "/tmp")
     assert text == "Dòng 1\nDòng 2"
+
+
+# --- AD-98: giữ đúng thứ tự chữ ↔ ảnh theo file QTI ---
+
+def test_blocks_keep_image_position(monkeypatch):
+    """Ảnh nằm GIỮA chữ (xét nghiệm → hình → câu hỏi) phải giữ đúng vị trí, không
+    bị dồn xuống cuối."""
+    monkeypatch.setattr("app.services.qti_loader._load_image",
+                        lambda p: {"b64": "ZmFrZQ==", "mime": "image/jpeg"})
+    from app.services.qti_loader import _extract_blocks
+    xml = (
+        '<div class="stem">Bệnh án + xét nghiệm.'
+        '<br/><img src="resources/x.jpg" alt="Question attachment"/></div>'
+    )
+    blocks = _extract_blocks(ET.fromstring(xml), "/tmp")
+    assert [b["type"] for b in blocks] == ["text", "image"]
+    assert blocks[0]["text"] == "Bệnh án + xét nghiệm."
+
+
+def test_extract_text_and_images_backward_compat(monkeypatch):
+    """Hàm cũ vẫn trả (text, images) đúng — dùng cho đáp án + tương thích."""
+    monkeypatch.setattr("app.services.qti_loader._load_image",
+                        lambda p: {"b64": "ZmFrZQ==", "mime": "image/jpeg"})
+    from app.services.qti_loader import _extract_text_and_images
+    text, imgs = _extract_text_and_images(
+        ET.fromstring('<div>A<br/><img src="r/x.jpg"/>B</div>'), "/tmp")
+    assert text == "A\nB"
+    assert len(imgs) == 1 and imgs[0]["mime"] == "image/jpeg"

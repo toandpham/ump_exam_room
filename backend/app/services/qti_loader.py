@@ -80,15 +80,28 @@ _BLOCK_TAGS = {"p", "div", "li", "ul", "ol", "tr", "table",
                "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"}
 
 
-def _extract_text_and_images(elem: ET.Element, root_dir: str) -> tuple[str, list[dict]]:
-    """Recursively walk ``elem`` (inclusive), returning plain text + any embedded
-    ``<img>`` files as base64. Image ``src`` resolved relative to ``root_dir``.
+def _norm_text(raw: str) -> str:
+    """Chuẩn hoá 1 đoạn text: gộp khoảng trắng trong từng dòng, bỏ dòng trống →
+    mỗi ý một dòng (\\n giữ nguyên; màn thi render whitespace-pre-wrap, AD-97)."""
+    lines = [" ".join(ln.split()) for ln in raw.split("\n")]
+    return "\n".join(ln for ln in lines if ln)
 
-    Ranh giới thẻ khối (<p>, <div>…) và <br/> được chuyển thành ``\\n`` để giữ đúng
-    cấu trúc xuống dòng của đề; màn thi render với ``whitespace-pre-wrap`` nên các
-    ``\\n`` này hiển thị thành dòng mới (AD-97)."""
-    text_parts: list[str] = []
-    images: list[dict] = []
+
+def _extract_blocks(elem: ET.Element, root_dir: str) -> list[dict]:
+    """Bóc nội dung của ``elem`` thành DANH SÁCH KHỐI CÓ THỨ TỰ (AD-98):
+    ``{"type":"text","text":…}`` và ``{"type":"image","b64":…,"mime":…}`` XEN KẼ
+    ĐÚNG như trong file — nhờ đó ảnh nằm giữa/ cuối chữ giữ nguyên vị trí thay vì
+    bị dồn xuống dưới. Ranh giới thẻ khối + <br/> thành ``\\n`` (như AD-97)."""
+    blocks: list[dict] = []
+    buf: list[str] = []
+
+    def flush() -> None:
+        if not buf:
+            return
+        text = _norm_text("".join(buf))
+        buf.clear()
+        if text:
+            blocks.append({"type": "text", "text": text})
 
     def walk(e: ET.Element) -> None:
         tag = _localname(e.tag)
@@ -97,36 +110,40 @@ def _extract_text_and_images(elem: ET.Element, root_dir: str) -> tuple[str, list
             if src:
                 img = _load_image(os.path.join(root_dir, src))
                 if img:
-                    images.append(img)
-            # KHÔNG lấy thuộc tính alt của ảnh vào nội dung câu hỏi: nhà cung cấp
-            # thường để alt chung chung ("Question attachment") → thừa 1 dòng rác
-            # hiển thị dưới câu hỏi. Ảnh vẫn được nạp bình thường ở trên.
+                    flush()   # chốt đoạn chữ trước ảnh → giữ đúng thứ tự
+                    blocks.append({"type": "image", **img})
+            # KHÔNG lấy alt của ảnh (thường là "Question attachment" — rác).
             if e.tail:
-                text_parts.append(e.tail)
+                buf.append(e.tail)
             return
         if tag == "br":
-            text_parts.append("\n")
+            buf.append("\n")
             if e.tail:
-                text_parts.append(e.tail)
+                buf.append(e.tail)
             return
         block = tag in _BLOCK_TAGS
         if block:
-            text_parts.append("\n")
+            buf.append("\n")
         if e.text:
-            text_parts.append(e.text)
+            buf.append(e.text)
         for child in e:
             walk(child)
         if block:
-            text_parts.append("\n")
+            buf.append("\n")
         if e.tail:
-            text_parts.append(e.tail)
+            buf.append(e.tail)
 
     walk(elem)
-    # Ghép NGUYÊN (giữ \n), rồi chuẩn hoá: gộp khoảng trắng trong dòng, cắt lề mỗi
-    # dòng, gộp nhiều dòng trống liên tiếp thành một, bỏ dòng trống đầu/cuối.
-    raw = "".join(text_parts)
-    lines = [" ".join(ln.split()) for ln in raw.split("\n")]   # gộp khoảng trắng trong dòng
-    text = "\n".join(ln for ln in lines if ln)                 # bỏ dòng trống → mỗi ý 1 dòng
+    flush()
+    return blocks
+
+
+def _extract_text_and_images(elem: ET.Element, root_dir: str) -> tuple[str, list[dict]]:
+    """Tương thích ngược: trả (text, images) gộp từ các khối. Text = nối các khối
+    chữ bằng \\n; images = ảnh theo thứ tự. Dùng cho đáp án + nơi không cần khối."""
+    blocks = _extract_blocks(elem, root_dir)
+    text = "\n".join(b["text"] for b in blocks if b["type"] == "text")
+    images = [{"b64": b["b64"], "mime": b["mime"]} for b in blocks if b["type"] == "image"]
     return text, images
 
 
@@ -170,25 +187,26 @@ def _parse_item(item_path: str, root_dir: str, order_index: int) -> dict:
     if body is None:
         raise QtiLoadError(f"Câu hỏi thiếu qti-item-body: {item_path}")
 
-    # Question text = stem + lead-in concatenated; images extracted inline.
-    text_chunks: list[str] = []
-    images: list[dict] = []
+    # Nội dung câu hỏi = mọi khối trong item-body TRƯỚC phần đáp án, GIỮ NGUYÊN THỨ
+    # TỰ (chữ ↔ ảnh xen kẽ) — AD-98. Trước đây gom hết chữ rồi dồn ảnh xuống cuối →
+    # ảnh (vd hình siêu âm giữa "xét nghiệm" và "câu hỏi") bị rơi sai vị trí.
+    raw_blocks: list[dict] = []
     for child in body:
-        tag = _localname(child.tag)
-        if tag in {"div", "p"} and child.attrib.get("class") in {"stem", "lead-in"}:
-            t, imgs = _extract_text_and_images(child, root_dir)
-            if t:
-                text_chunks.append(t)
-            images.extend(imgs)
-        elif tag == "qti-choice-interaction":
+        if _localname(child.tag) == "qti-choice-interaction":
             break
+        raw_blocks.extend(_extract_blocks(child, root_dir))
+
+    # Tách ảnh ra mảng ``images`` (materialize/preload dùng), khối ảnh chỉ giữ CHỈ
+    # SỐ trỏ vào mảng đó. ``text`` (nối các khối chữ) giữ cho báo cáo + tương thích.
+    images: list[dict] = []
+    blocks: list[dict] = []
+    for b in raw_blocks:
+        if b["type"] == "image":
+            blocks.append({"type": "image", "index": len(images)})
+            images.append({"b64": b["b64"], "mime": b["mime"]})
         else:
-            # any other body content — still pull text + images
-            t, imgs = _extract_text_and_images(child, root_dir)
-            if t:
-                text_chunks.append(t)
-            images.extend(imgs)
-    text = "\n".join(text_chunks).strip()
+            blocks.append(b)
+    text = "\n".join(b["text"] for b in blocks if b["type"] == "text").strip()
 
     interaction = _find(body, "qti-choice-interaction")
     if interaction is None:
@@ -242,6 +260,10 @@ def _parse_item(item_path: str, root_dir: str, order_index: int) -> dict:
         "code": root.attrib.get("identifier") or "",
         "text": text,
         "images": images,
+        # Khối có thứ tự (chữ ↔ ảnh xen kẽ) để render đúng vị trí ảnh (AD-98).
+        # Khối ảnh mang ``index`` trỏ vào ``images``. Payload cũ không có → FE tự
+        # lùi về hiển thị text rồi images (tương thích ngược).
+        "blocks": blocks,
         "options": options,
         "correct_option": correct,
         "order_index": order_index,

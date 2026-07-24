@@ -35,10 +35,20 @@ class ExamQuestionOption(BaseModel):
     images: list[str] = Field(default_factory=list)  # list of data URLs
 
 
+class ExamBlock(BaseModel):
+    # Khối nội dung câu hỏi CÓ THỨ TỰ (AD-98): "text" mang ``text``, "image" mang
+    # ``src`` (URL). Render tuần tự để ảnh nằm đúng vị trí trong file QTI.
+    type: str
+    text: str = ""
+    src: str = ""
+
+
 class ExamQuestion(BaseModel):
     id: str
     text: str
     images: list[str] = Field(default_factory=list)  # list of data URLs
+    # Nội dung theo thứ tự gốc (chữ ↔ ảnh). Rỗng = đề cũ → FE lùi về text+images.
+    blocks: list[ExamBlock] = Field(default_factory=list)
     options: list[ExamQuestionOption]
 
 
