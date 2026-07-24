@@ -66,8 +66,10 @@ describe("QuestionCard", () => {
     const inline = container.querySelector("img")!;
     expect(inline.getAttribute("src")).toBe("/uploads/full_t.jpg");   // trong bài: bản nhỏ
     fireEvent.click(inline);                                          // phóng to
-    const zoomed = container.querySelector(".fixed.inset-0 img")!;
-    expect(zoomed.getAttribute("src")).toBe("/uploads/full.jpg");     // lightbox: bản đầy đủ
+    // AD-109: lightbox lũy tiến — bản nhỏ hiện NGAY, bản đầy đủ đè lên khi tải xong.
+    const zoomed = Array.from(container.querySelectorAll(".fixed.inset-0 img"))
+      .map((el) => el.getAttribute("src"));
+    expect(zoomed).toEqual(["/uploads/full_t.jpg", "/uploads/full.jpg"]);
   });
 
   it("AD-98: render khối theo ĐÚNG thứ tự file (chữ → ảnh → câu hỏi)", () => {

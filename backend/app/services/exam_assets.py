@@ -25,9 +25,10 @@ logger = logging.getLogger("exam.assets")
 
 # Ảnh đề rộng hơn ngưỡng này sẽ được thu nhỏ khi nạp đề (AD-90). Máy thi thật là
 # Win7/4GB: ảnh gốc từ máy scan/điện thoại (3000–4000px) tốn cả chục MB RAM mỗi
-# tấm khi giải nén, trong khi khung hiển thị chỉ ~800px và phóng to hết cỡ màn
-# hình cũng chỉ ~1600px. Thu nhỏ 1 lần ở server → nhẹ cho CẢ 400 máy.
-MAX_IMAGE_WIDTH = 1600
+# tấm khi giải nén. AD-109: hạ 1600→1280 — màn máy thi 1366×768 nên tấm 1600px
+# KHÔNG BAO GIỜ hiển thị hết cỡ được; giải nén to hơn màn hình = phí RAM vô ích
+# (chính là cú đơ ~2s khi đóng zoom). 1280px vừa khít phóng to full màn.
+MAX_IMAGE_WIDTH = 1280
 JPEG_QUALITY = 85
 
 # AD-107: bản NHỎ hiển thị trong bài. Khung câu hỏi chỉ rộng ~720px nhưng máy con

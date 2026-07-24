@@ -23,7 +23,8 @@ def test_large_image_is_downscaled_to_max_width():
     out, mime = exam_assets.shrink_image(original, "image/jpeg")
     with Image.open(io.BytesIO(out)) as im:
         assert im.width == exam_assets.MAX_IMAGE_WIDTH
-        assert im.height == 1200                      # giữ đúng tỉ lệ
+        # Giữ đúng tỉ lệ 4:3 theo trần hiện hành (AD-109: 1280 → 960).
+        assert im.height == round(exam_assets.MAX_IMAGE_WIDTH * 2400 / 3200)
     assert len(out) < len(original)
     assert mime == "image/jpeg"
 

@@ -20,8 +20,10 @@ function QuestionCard({
   onJumpUnanswered: () => void;
   onSubmit: () => void;
 }) {
-  // Ảnh đang phóng to (lightbox). null = không phóng.
-  const [zoom, setZoom] = useState<string | null>(null);
+  // Ảnh đang phóng to (lightbox). null = không phóng. AD-109: giữ CẢ bản nhỏ —
+  // hiện ngay bản nhỏ (đã giải nén sẵn), bản đầy đủ đè lên khi tải xong; máy 4GB
+  // không còn khựng lúc mở/đóng zoom vì tấm to chỉ 1280px (vừa màn 1366×768).
+  const [zoom, setZoom] = useState<{ full: string; thumb: string } | null>(null);
 
   return (
     <div className="my-auto w-full">
@@ -39,7 +41,7 @@ function QuestionCard({
           <div className="mb-4">
             {q.blocks.map((b, i) =>
               b.type === "image" && b.src ? (
-                <img key={i} src={b.thumb || b.src} onClick={() => setZoom(b.src!)}
+                <img key={i} src={b.thumb || b.src} onClick={() => setZoom({ full: b.src!, thumb: b.thumb || b.src! })}
                   loading="lazy" decoding="async" title="Bấm để phóng to"
                   className="max-h-72 rounded border cursor-zoom-in hover:opacity-90 my-3" />
               ) : (
@@ -54,7 +56,7 @@ function QuestionCard({
             {q.images && q.images.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-5">
                 {q.images.map((src, i) => (
-                  <img key={i} src={q.thumbs?.[i] || src} onClick={() => setZoom(src)}
+                  <img key={i} src={q.thumbs?.[i] || src} onClick={() => setZoom({ full: src, thumb: q.thumbs?.[i] || src })}
                     loading="lazy" decoding="async"
                     title="Bấm để phóng to"
                     className="max-h-72 rounded border cursor-zoom-in hover:opacity-90" />
@@ -82,7 +84,7 @@ function QuestionCard({
                     {o.images.map((src, i) => (
                       <img key={i} src={o.thumbs?.[i] || src}
                         loading="lazy" decoding="async"
-                        onClick={(e) => { e.stopPropagation(); setZoom(src); }}
+                        onClick={(e) => { e.stopPropagation(); setZoom({ full: src, thumb: o.thumbs?.[i] || src }); }}
                         title="Bấm để phóng to"
                         className="h-10 rounded border cursor-zoom-in hover:opacity-90" />
                     ))}
@@ -137,10 +139,15 @@ function QuestionCard({
       {/* Lightbox phóng to ảnh — bấm nền để đóng */}
       {zoom && (
         <div
-          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 cursor-zoom-out"
+          className="fixed inset-0 z-50 bg-black/85 grid place-items-center p-4 cursor-zoom-out"
           onClick={() => setZoom(null)}
         >
-          <img src={zoom} className="max-h-full max-w-full rounded shadow-2xl" />
+          {/* AD-109: bản nhỏ hiện NGAY (đã giải nén sẵn); bản đầy đủ đè lên khi tải
+              xong. Cùng ô grid nên chồng khít, không nhảy layout. */}
+          <img src={zoom.thumb} className="col-start-1 row-start-1 max-h-full max-w-full rounded shadow-2xl" />
+          {zoom.full !== zoom.thumb && (
+            <img src={zoom.full} className="col-start-1 row-start-1 max-h-full max-w-full rounded" />
+          )}
         </div>
       )}
     </div>
