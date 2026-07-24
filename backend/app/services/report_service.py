@@ -220,7 +220,8 @@ def export_excel(report: dict, exam_name: str | None = None) -> bytes:
 
     # Nhãn cột định danh = "CCCD/Hộ chiếu" thống nhất toàn hệ thống (AD-58/105) —
     # trước đây sheet này ghi "Số báo danh", sheet Đáp án ghi "Mã sinh viên" dù cùng 1 giá trị.
-    headers_kq = ["STT", "CCCD/Hộ chiếu", "Họ đệm", "Tên", "Tổ", "Ngày sinh", "Điểm", "Số câu đúng"]
+    # AD-108: bỏ cột "Tổ" (phòng thi) theo yêu cầu — mẫu nộp không cần.
+    headers_kq = ["STT", "CCCD/Hộ chiếu", "Họ đệm", "Tên", "Ngày sinh", "Điểm", "Số câu đúng"]
     ws_kq.append(headers_kq)
     for col_idx in range(1, len(headers_kq) + 1):
         ws_kq.cell(row=5, column=col_idx).font = bold
@@ -238,7 +239,6 @@ def export_excel(report: dict, exam_name: str | None = None) -> bytes:
             row["cccd"],
             row["ho_dem"],
             row["ten"],
-            row["room_name"],
             _fmt_date(row["birth_date"]),
             diem_cell,
             so_cau,
@@ -246,7 +246,7 @@ def export_excel(report: dict, exam_name: str | None = None) -> bytes:
         _force_text(ws_kq.cell(row=ws_kq.max_row, column=2))   # CCCD/Hộ chiếu (giữ số 0 đầu)
 
     # Độ rộng cột
-    for col, width in zip("ABCDEFGH", [6, 16, 22, 12, 14, 14, 10, 14]):
+    for col, width in zip("ABCDEFG", [6, 16, 22, 12, 14, 10, 14]):
         ws_kq.column_dimensions[col].width = width
 
     # ── Sheet 2: Đáp án ──────────────────────────────────────────────────────
