@@ -15,6 +15,7 @@ import KioskRequiredScreen from "./screens/KioskRequiredScreen";
 import LicenseBlockedScreen from "./screens/LicenseBlockedScreen";
 import NoExamScreen from "./screens/NoExamScreen";
 import CountdownScreen from "./screens/CountdownScreen";
+import DiagnosticsOverlay from "./components/DiagnosticsOverlay";
 
 export default function App() {
   const token = useStore((s) => s.token);
@@ -28,8 +29,13 @@ export default function App() {
     if (!token) qc.clear();
   }, [token, qc]);
 
-  if (!token) return <LoginGate />;
-  return <ExamShell />;
+  return (
+    <>
+      {/* AD-96: bảng chẩn đoán hiệu năng, ẩn; bật bằng Ctrl+Shift+D trên mọi màn hình. */}
+      <DiagnosticsOverlay />
+      {!token ? <LoginGate /> : <ExamShell />}
+    </>
+  );
 }
 
 /** Before showing the login form, confirm an exam is actually running. No exam
