@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render } from "@testing-library/react";
+import { render, fireEvent } from "@testing-library/react";
 import QuestionCard from "./QuestionCard";
 import type { ExamQuestion } from "../../api/exam";
 
@@ -51,6 +51,23 @@ describe("QuestionCard", () => {
         onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
     );
     expect(mid.container.textContent).toContain("Câu sau");
+  });
+
+  it("AD-107: hiển thị bản NHỎ (thumb), bấm phóng to mới dùng bản đầy đủ", () => {
+    const q: ExamQuestion = {
+      ...Q,
+      images: ["/uploads/full.jpg"],
+      blocks: [{ type: "image", src: "/uploads/full.jpg", thumb: "/uploads/full_t.jpg" }],
+    };
+    const { container } = render(
+      <QuestionCard q={q} index={0} total={1} answers={{}} unansweredCount={0}
+        onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+    );
+    const inline = container.querySelector("img")!;
+    expect(inline.getAttribute("src")).toBe("/uploads/full_t.jpg");   // trong bài: bản nhỏ
+    fireEvent.click(inline);                                          // phóng to
+    const zoomed = container.querySelector(".fixed.inset-0 img")!;
+    expect(zoomed.getAttribute("src")).toBe("/uploads/full.jpg");     // lightbox: bản đầy đủ
   });
 
   it("AD-98: render khối theo ĐÚNG thứ tự file (chữ → ảnh → câu hỏi)", () => {

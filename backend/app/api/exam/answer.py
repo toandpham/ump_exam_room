@@ -56,23 +56,25 @@ def _data_url(b64: str | None, mime: str | None) -> str | None:
     return f"data:{mime or 'image/jpeg'};base64,{b64}"
 
 
-def _images(obj: dict) -> list[str]:
-    """Normalize a question/option's images into a list of URLs.
+def _image_pairs(obj: dict) -> list[tuple[str, str]]:
+    """Normalize a question/option's images into ``[(full, thumb), ...]``.
 
     SP-1: ưu tiên ``url`` tĩnh (Caddy) nếu có; fallback data URL base64 cho
     payload cũ / chưa materialize. Còn accept field legacy ``image_b64``.
+    AD-107: ``thumb`` = bản nhỏ hiển thị trong bài (``thumb_url``); payload cũ
+    chưa có → thumb = bản đầy đủ (hành vi như trước).
     """
-    out: list[str] = []
+    out: list[tuple[str, str]] = []
     for im in obj.get("images") or []:
         # SP-1: ảnh đã materialize → dùng URL tĩnh (Caddy phục vụ); payload cũ/
         # chưa materialize → fallback data URL base64.
         src = im.get("url") or _data_url(im.get("b64"), im.get("mime"))
         if src:
-            out.append(src)
+            out.append((src, im.get("thumb_url") or src))
     if not out:
         legacy = _data_url(obj.get("image_b64"), obj.get("image_mime"))
         if legacy:
-            out.append(legacy)
+            out.append((legacy, legacy))
     return out
 
 
@@ -128,30 +130,33 @@ async def get_questions(
             continue
         opts_by_id = {o["id"]: o for o in q.get("options", [])}
         ordered_ids = option_order.get(qid) or [o["id"] for o in q.get("options", [])]
-        options = [
-            ExamQuestionOption(
+        options = []
+        for oid in ordered_ids:
+            o_pairs = _image_pairs(opts_by_id.get(oid, {}))
+            options.append(ExamQuestionOption(
                 id=oid,
                 text=opts_by_id.get(oid, {}).get("text", ""),
-                images=_images(opts_by_id.get(oid, {})),
-            )
-            for oid in ordered_ids
-        ]
-        q_images = _images(q)
+                images=[p[0] for p in o_pairs],
+                thumbs=[p[1] for p in o_pairs],
+            ))
+        q_pairs = _image_pairs(q)
+        q_images = [p[0] for p in q_pairs]
         # Khối có thứ tự (AD-98): khối ảnh mang ``index`` trỏ vào ``images`` → đổi
-        # thành URL đã materialize. Đề cũ không có ``blocks`` → để rỗng, FE lùi về
-        # hiển thị text rồi images như trước.
+        # thành URL đã materialize (kèm thumb hiển thị, AD-107). Đề cũ không có
+        # ``blocks`` → để rỗng, FE lùi về hiển thị text rồi images như trước.
         blocks: list[ExamBlock] = []
         for b in q.get("blocks") or []:
             if b.get("type") == "image":
                 idx = b.get("index", 0)
-                if 0 <= idx < len(q_images):
-                    blocks.append(ExamBlock(type="image", src=q_images[idx]))
+                if 0 <= idx < len(q_pairs):
+                    blocks.append(ExamBlock(type="image", src=q_pairs[idx][0], thumb=q_pairs[idx][1]))
             elif b.get("text"):
                 blocks.append(ExamBlock(type="text", text=b["text"]))
         questions.append(ExamQuestion(
             id=qid,
             text=q["text"],
             images=q_images,
+            thumbs=[p[1] for p in q_pairs],
             blocks=blocks,
             options=options,
         ))

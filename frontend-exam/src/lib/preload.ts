@@ -95,14 +95,18 @@ export function preloadAllPaced(urls: string[]): () => void {
   };
 }
 
-/** Gom mọi URL ảnh (câu + đáp án) của một danh sách câu hỏi. */
+/** Gom mọi URL ảnh (câu + đáp án) của một danh sách câu hỏi. AD-107: ưu tiên bản
+ * NHỎ (thumbs — thứ thực sự hiển thị trong bài); bản đầy đủ chỉ tải khi phóng to. */
 export function imageUrlsOf(
-  questions: { images: string[]; options: { images: string[] }[] }[],
+  questions: {
+    images: string[]; thumbs?: string[];
+    options: { images: string[]; thumbs?: string[] }[];
+  }[],
 ): string[] {
   const urls: string[] = [];
   for (const q of questions) {
-    urls.push(...q.images);
-    for (const o of q.options) urls.push(...o.images);
+    q.images.forEach((src, i) => urls.push(q.thumbs?.[i] || src));
+    for (const o of q.options) o.images.forEach((src, i) => urls.push(o.thumbs?.[i] || src));
   }
   return urls;
 }

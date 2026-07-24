@@ -33,11 +33,13 @@ function QuestionCard({
         {/* Nội dung câu hỏi. AD-98: nếu có `blocks` (đề nạp mới) → render chữ ↔ ảnh
             ĐÚNG THỨ TỰ trong file QTI (vd: xét nghiệm → hình → câu hỏi). Đề cũ không
             có blocks → lùi về hiển thị toàn bộ chữ rồi ảnh (như trước). */}
+        {/* AD-107: hiển thị BẢN NHỎ (thumb) — máy 4GB không phải giải nén tấm
+            1600px cho khung ~700px; bấm phóng to mới tải bản đầy đủ (src). */}
         {q.blocks && q.blocks.length > 0 ? (
           <div className="mb-4">
             {q.blocks.map((b, i) =>
               b.type === "image" && b.src ? (
-                <img key={i} src={b.src} onClick={() => setZoom(b.src!)}
+                <img key={i} src={b.thumb || b.src} onClick={() => setZoom(b.src!)}
                   loading="lazy" decoding="async" title="Bấm để phóng to"
                   className="max-h-72 rounded border cursor-zoom-in hover:opacity-90 my-3" />
               ) : (
@@ -52,7 +54,7 @@ function QuestionCard({
             {q.images && q.images.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-5">
                 {q.images.map((src, i) => (
-                  <img key={i} src={src} onClick={() => setZoom(src)}
+                  <img key={i} src={q.thumbs?.[i] || src} onClick={() => setZoom(src)}
                     loading="lazy" decoding="async"
                     title="Bấm để phóng to"
                     className="max-h-72 rounded border cursor-zoom-in hover:opacity-90" />
@@ -78,7 +80,7 @@ function QuestionCard({
                 {o.images && o.images.length > 0 && (
                   <span className="flex flex-wrap gap-1 shrink-0">
                     {o.images.map((src, i) => (
-                      <img key={i} src={src}
+                      <img key={i} src={o.thumbs?.[i] || src}
                         loading="lazy" decoding="async"
                         onClick={(e) => { e.stopPropagation(); setZoom(src); }}
                         title="Bấm để phóng to"

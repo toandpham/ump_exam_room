@@ -58,6 +58,37 @@ def test_materialize_writes_files_and_sets_url(upload_tmp):
     assert payload["questions"][1]["images"] == []
 
 
+def test_materialize_makes_thumb_for_large_image(upload_tmp):
+    """AD-107: ảnh rộng hơn THUMB_WIDTH → sinh thêm bản nhỏ ``_t`` (hiển thị trong
+    bài); ảnh nhỏ sẵn → thumb_url = url (không sinh file thừa)."""
+    from PIL import Image as PILImage
+
+    buf = io.BytesIO()
+    PILImage.new("RGB", (1500, 900), "white").save(buf, "JPEG")
+    big_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+
+    sid = uuid.uuid4()
+    payload = {"questions": [{
+        "id": "q1", "text": "x",
+        "images": [{"b64": big_b64, "mime": "image/jpeg"},
+                   {"b64": _PNG_B64, "mime": "image/png"}],
+        "options": [],
+    }]}
+    out = exam_assets.materialize_payload_images(sid, payload)
+    big, small = out["questions"][0]["images"]
+
+    # Ảnh to: thumb riêng, đúng bề rộng THUMB_WIDTH, file tồn tại.
+    assert big["thumb_url"] != big["url"]
+    assert "_t." in big["thumb_url"]
+    tpath = upload_tmp / big["thumb_url"][len("/uploads/"):]
+    assert tpath.is_file()
+    with PILImage.open(tpath) as im:
+        assert im.width == exam_assets.THUMB_WIDTH
+
+    # Ảnh nhỏ (1x1): dùng luôn bản đầy đủ.
+    assert small["thumb_url"] == small["url"]
+
+
 def test_materialize_strips_b64_after_writing(upload_tmp):
     """SP-1b: ảnh đã ra file tĩnh thì XOÁ b64 khỏi payload — bản ghi vào Redis
     chỉ còn URL (đề 280 câu nhiều ảnh từng phình Redis payload ~110MB, mỗi lần
@@ -193,10 +224,14 @@ async def test_questions_serve_static_url_then_wiped(client, factory):
 
 def test_images_falls_back_to_base64_when_no_url():
     """Payload cũ chưa materialize (không có 'url') → /questions vẫn trả data URL."""
-    from app.api.exam.answer import _images
-    out = _images({"images": [{"b64": _PNG_B64, "mime": "image/png"}]})
+    from app.api.exam.answer import _image_pairs
+    out = _image_pairs({"images": [{"b64": _PNG_B64, "mime": "image/png"}]})
     assert len(out) == 1
-    assert out[0].startswith("data:image/png;base64,")
-    # Khi CÓ url thì ưu tiên url.
-    out2 = _images({"images": [{"b64": _PNG_B64, "mime": "image/png", "url": "/uploads/x/y.png"}]})
-    assert out2 == ["/uploads/x/y.png"]
+    assert out[0][0].startswith("data:image/png;base64,")
+    assert out[0][1] == out[0][0]   # chưa có thumb → thumb = bản đầy đủ
+    # Khi CÓ url thì ưu tiên url; có thumb_url thì thumb đi kèm (AD-107).
+    out2 = _image_pairs({"images": [{
+        "b64": _PNG_B64, "mime": "image/png",
+        "url": "/uploads/x/y.png", "thumb_url": "/uploads/x/y_t.png",
+    }]})
+    assert out2 == [("/uploads/x/y.png", "/uploads/x/y_t.png")]

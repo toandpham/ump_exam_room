@@ -30,6 +30,13 @@ logger = logging.getLogger("exam.assets")
 MAX_IMAGE_WIDTH = 1600
 JPEG_QUALITY = 85
 
+# AD-107: bản NHỎ hiển thị trong bài. Khung câu hỏi chỉ rộng ~720px nhưng máy con
+# phải GIẢI NÉN nguyên tấm 1600px (~7-8MB RAM/tấm) → máy 4GB nghẹt mỗi lần chuyển
+# câu nhiều ảnh (hiện trường: "để yên 20-30s mới nhanh lại"). Sinh thêm bản ≤720px
+# cho hiển thị; bản 1600px CHỈ tải khi bấm phóng to (zoom vẫn nét).
+THUMB_WIDTH = 720
+THUMB_QUALITY = 82
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # mime → đuôi file (ảnh QTI nội tuyến thường jpg/png/webp/gif).
@@ -74,6 +81,31 @@ def shrink_image(data: bytes, mime: str | None) -> tuple[bytes, str | None]:
         return data, mime
 
 
+def _thumb_bytes(data: bytes) -> bytes | None:
+    """Bản nhỏ ≤``THUMB_WIDTH`` để hiển thị trong bài (AD-107). Mục tiêu là giảm
+    SỐ PIXEL máy con phải giải nén (RAM), không chỉ số byte. Trả None khi ảnh đã
+    đủ nhỏ / định dạng lạ / lỗi — caller dùng luôn bản đầy đủ."""
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            if im.width <= THUMB_WIDTH:
+                return None
+            fmt = (im.format or "").upper()
+            if fmt not in {"JPEG", "PNG", "WEBP"}:
+                return None
+            height = max(1, round(im.height * THUMB_WIDTH / im.width))
+            resized = im.convert("RGB") if fmt == "JPEG" else im.copy()
+            resized = resized.resize((THUMB_WIDTH, height), Image.LANCZOS)
+            buf = io.BytesIO()
+            if fmt == "JPEG":
+                resized.save(buf, "JPEG", quality=THUMB_QUALITY, optimize=True)
+            else:
+                resized.save(buf, fmt)
+            return buf.getvalue()
+    except Exception as exc:  # noqa: BLE001 — ảnh lạ/hỏng: dùng bản đầy đủ
+        logger.warning("thumb bỏ qua một ảnh: %s", exc)
+        return None
+
+
 def materialize_payload_images(sitting_id: uuid.UUID, payload: dict) -> dict:
     """Ghi bytes của mọi ảnh (câu + đáp án) ra đĩa, dedup theo sha256 nội dung,
     THÊM khoá ``url`` (gốc-tương-đối) và XOÁ ``b64`` khỏi từng image dict —
@@ -105,6 +137,16 @@ def materialize_payload_images(sitting_id: uuid.UUID, payload: dict) -> dict:
             if not fpath.exists():
                 fpath.write_bytes(data)
             im["url"] = f"{prefix}/{fname}"
+            # AD-107: bản nhỏ hiển thị trong bài (bản đầy đủ chỉ tải khi phóng to).
+            thumb = _thumb_bytes(data)
+            if thumb is not None:
+                tname = f"{sha}_t.{ext}"
+                tpath = img_dir / tname
+                if not tpath.exists():
+                    tpath.write_bytes(thumb)
+                im["thumb_url"] = f"{prefix}/{tname}"
+            else:
+                im["thumb_url"] = im["url"]
             im.pop("b64", None)
 
     for q in payload.get("questions", []):

@@ -33,6 +33,8 @@ class ExamQuestionOption(BaseModel):
     id: str
     text: str
     images: list[str] = Field(default_factory=list)  # list of data URLs
+    # AD-107: bản nhỏ hiển thị (song song ``images``); rỗng/thiếu → FE dùng images.
+    thumbs: list[str] = Field(default_factory=list)
 
 
 class ExamBlock(BaseModel):
@@ -41,12 +43,16 @@ class ExamBlock(BaseModel):
     type: str
     text: str = ""
     src: str = ""
+    # AD-107: bản nhỏ hiển thị; "" → FE dùng ``src``. Phóng to luôn tải ``src``.
+    thumb: str = ""
 
 
 class ExamQuestion(BaseModel):
     id: str
     text: str
     images: list[str] = Field(default_factory=list)  # list of data URLs
+    # AD-107: bản nhỏ hiển thị (song song ``images``); rỗng/thiếu → FE dùng images.
+    thumbs: list[str] = Field(default_factory=list)
     # Nội dung theo thứ tự gốc (chữ ↔ ảnh). Rỗng = đề cũ → FE lùi về text+images.
     blocks: list[ExamBlock] = Field(default_factory=list)
     options: list[ExamQuestionOption]

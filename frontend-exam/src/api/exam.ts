@@ -48,17 +48,20 @@ export interface ExamOption {
   id: string;
   text: string;
   images: string[];
+  thumbs?: string[];      // AD-107: bản nhỏ hiển thị; thiếu → dùng images
 }
 /** Khối nội dung câu hỏi CÓ THỨ TỰ (AD-98): chữ ↔ ảnh xen kẽ đúng như file QTI. */
 export interface ExamBlock {
   type: "text" | "image";
   text?: string;
   src?: string;
+  thumb?: string;         // AD-107: bản nhỏ hiển thị; phóng to luôn tải src
 }
 export interface ExamQuestion {
   id: string;
   text: string;
   images: string[];
+  thumbs?: string[];      // AD-107: bản nhỏ hiển thị; thiếu → dùng images
   blocks?: ExamBlock[];   // rỗng/thiếu (đề cũ) → lùi về hiển thị text rồi images
   options: ExamOption[];
 }

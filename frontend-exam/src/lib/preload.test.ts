@@ -96,4 +96,14 @@ describe("imageUrlsOf", () => {
       { images: [], options: [{ images: ["o2.jpg"] }] },
     ])).toEqual(["q1.jpg", "o1.jpg", "o2.jpg"]);
   });
+
+  it("AD-107: ưu tiên bản nhỏ (thumbs) khi có — đó mới là thứ hiển thị trong bài", async () => {
+    const { imageUrlsOf } = await freshModule();
+    expect(imageUrlsOf([
+      {
+        images: ["q1.jpg", "q2.jpg"], thumbs: ["q1_t.jpg", "q2.jpg"],
+        options: [{ images: ["o1.jpg"], thumbs: ["o1_t.jpg"] }],
+      },
+    ])).toEqual(["q1_t.jpg", "q2.jpg", "o1_t.jpg"]);
+  });
 });
