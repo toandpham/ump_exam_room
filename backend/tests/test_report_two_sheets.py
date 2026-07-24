@@ -92,8 +92,8 @@ async def test_export_excel_has_two_sheets_and_absent(client, factory, db):
     assert "Điểm" in header_kq
     assert "STT" in header_kq
 
-    # Tìm index cột CCCD ("Số báo danh") và "Điểm"
-    col_cccd = header_kq.index("Số báo danh") + 1   # 1-indexed
+    # Tìm index cột định danh ("CCCD/Hộ chiếu") và "Điểm"
+    col_cccd = header_kq.index("CCCD/Hộ chiếu") + 1   # 1-indexed
     col_diem = header_kq.index("Điểm") + 1
 
     # Dòng dữ liệu bắt đầu từ row 6
@@ -111,12 +111,12 @@ async def test_export_excel_has_two_sheets_and_absent(client, factory, db):
 
     # Dòng 5: header; dòng 6: "Mã câu hỏi"; dòng 7: "Đáp án đúng"; dòng 8+: thí sinh
     header_da = _row_values(ws_da, 5)
-    assert "Mã sinh viên" in header_da
+    assert "CCCD/Hộ chiếu" in header_da
     # Cột câu hỏi bắt đầu từ index 5 (0-based), tức 1 và 2 trong header
     assert header_da[5] == 1
     assert header_da[6] == 2
 
-    # Dòng 6 = "Mã câu hỏi" (nhãn ở cột B = Mã sinh viên), mỗi câu = mã QTI gốc
+    # Dòng 6 = "Mã câu hỏi" (nhãn ở cột B = CCCD/Hộ chiếu), mỗi câu = mã QTI gốc
     code_row = _row_values(ws_da, 6)
     assert code_row[1] == "Mã câu hỏi"
     assert code_row[5] == "111101"   # Q1 mã câu hỏi
@@ -129,7 +129,7 @@ async def test_export_excel_has_two_sheets_and_absent(client, factory, db):
     assert correct_row[6] == "B"     # Q2 đáp án đúng
 
     # Tìm dòng của cand1 trong sheet Đáp án (dòng 8+)
-    col_cccd_da = header_da.index("Mã sinh viên")  # 0-based
+    col_cccd_da = header_da.index("CCCD/Hộ chiếu")  # 0-based
     for row in ws_da.iter_rows(min_row=8, values_only=True):
         if row[col_cccd_da] == cand1.cccd:
             assert row[5] == "A"               # Q1 chọn A

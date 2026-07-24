@@ -218,7 +218,9 @@ def export_excel(report: dict, exam_name: str | None = None) -> bytes:
         cell.number_format = "@"
         cell.quotePrefix = True
 
-    headers_kq = ["STT", "Số báo danh", "Họ đệm", "Tên", "Tổ", "Ngày sinh", "Điểm", "Số câu đúng"]
+    # Nhãn cột định danh = "CCCD/Hộ chiếu" thống nhất toàn hệ thống (AD-58/105) —
+    # trước đây sheet này ghi "Số báo danh", sheet Đáp án ghi "Mã sinh viên" dù cùng 1 giá trị.
+    headers_kq = ["STT", "CCCD/Hộ chiếu", "Họ đệm", "Tên", "Tổ", "Ngày sinh", "Điểm", "Số câu đúng"]
     ws_kq.append(headers_kq)
     for col_idx in range(1, len(headers_kq) + 1):
         ws_kq.cell(row=5, column=col_idx).font = bold
@@ -241,7 +243,7 @@ def export_excel(report: dict, exam_name: str | None = None) -> bytes:
             diem_cell,
             so_cau,
         ])
-        _force_text(ws_kq.cell(row=ws_kq.max_row, column=2))   # Số báo danh (CCCD/hộ chiếu)
+        _force_text(ws_kq.cell(row=ws_kq.max_row, column=2))   # CCCD/Hộ chiếu (giữ số 0 đầu)
 
     # Độ rộng cột
     for col, width in zip("ABCDEFGH", [6, 16, 22, 12, 14, 14, 10, 14]):
@@ -258,19 +260,19 @@ def export_excel(report: dict, exam_name: str | None = None) -> bytes:
     ws_da.cell(row=3, column=1).font = bold
     ws_da.append([])  # dòng trống
 
-    # Header: STT, Mã sinh viên, Họ đệm, Tên, Ngày sinh, 1, 2, ..., N (dòng 5)
-    headers_da = ["STT", "Mã sinh viên", "Họ đệm", "Tên", "Ngày sinh"] + list(range(1, n_q + 1))
+    # Header: STT, CCCD/Hộ chiếu, Họ đệm, Tên, Ngày sinh, 1, 2, ..., N (dòng 5)
+    headers_da = ["STT", "CCCD/Hộ chiếu", "Họ đệm", "Tên", "Ngày sinh"] + list(range(1, n_q + 1))
     ws_da.append(headers_da)
     for col_idx in range(1, len(headers_da) + 1):
         ws_da.cell(row=5, column=col_idx).font = bold
 
-    # Dòng "Mã câu hỏi" (dòng 6): nhãn ở cột Mã sinh viên (B), mỗi cột câu = mã câu
+    # Dòng "Mã câu hỏi" (dòng 6): nhãn ở cột CCCD/Hộ chiếu (B), mỗi cột câu = mã câu
     # hỏi gốc (identifier trong file QTI). Đề nạp trước bản này chưa lưu mã → để trống.
     code_row = ["", "Mã câu hỏi", "", "", ""] + [q.get("code", "") for q in questions]
     ws_da.append(code_row)
     ws_da.cell(row=6, column=2).font = bold
 
-    # Dòng "Đáp án đúng" (dòng 7): nhãn ở cột Mã sinh viên (B), cột câu = đáp án đúng
+    # Dòng "Đáp án đúng" (dòng 7): nhãn ở cột CCCD/Hộ chiếu (B), cột câu = đáp án đúng
     correct_row = ["", "Đáp án đúng", "", "", ""] + [q["correct_option"] for q in questions]
     ws_da.append(correct_row)
     ws_da.cell(row=7, column=2).font = bold
@@ -281,7 +283,7 @@ def export_excel(report: dict, exam_name: str | None = None) -> bytes:
             [row["stt"], row["cccd"], row["ho_dem"], row["ten"], _fmt_date(row["birth_date"])]
             + row["answers"]
         )
-        _force_text(ws_da.cell(row=ws_da.max_row, column=2))   # Mã sinh viên (CCCD/hộ chiếu)
+        _force_text(ws_da.cell(row=ws_da.max_row, column=2))   # CCCD/Hộ chiếu (giữ số 0 đầu)
 
     # Độ rộng cột cố định
     ws_da.column_dimensions["A"].width = 14

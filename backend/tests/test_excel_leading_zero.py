@@ -114,11 +114,11 @@ def test_report_forces_text_on_id_column_both_sheets():
     wb = _load(report_service.export_excel(data))
 
     kq = wb["Kết quả"]
-    c1 = kq.cell(row=6, column=2)          # dòng dữ liệu đầu, cột Số báo danh
+    c1 = kq.cell(row=6, column=2)          # dòng dữ liệu đầu, cột CCCD/Hộ chiếu
     assert c1.value == "012345678901"
     assert c1.number_format == "@" and c1.quotePrefix is True
 
     da = wb["Đáp án"]
-    c2 = da.cell(row=8, column=2)          # dòng dữ liệu đầu, cột Mã sinh viên
+    c2 = da.cell(row=8, column=2)          # dòng dữ liệu đầu, cột CCCD/Hộ chiếu (sheet Đáp án)
     assert c2.value == "012345678901"
     assert c2.number_format == "@" and c2.quotePrefix is True
