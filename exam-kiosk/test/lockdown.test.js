@@ -1,7 +1,7 @@
 "use strict";
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { isBlockedKey, KIOSK_WINDOW_OPTS } = require("../src/lockdown");
+const { isBlockedKey, keepOnTopActions, KIOSK_WINDOW_OPTS } = require("../src/lockdown");
 
 const ev = (over) => ({ type: "keyDown", key: "", control: false, alt: false, shift: false, meta: false, ...over });
 
@@ -37,6 +37,26 @@ test("allows normal typing + emergency combo + backspace + plain Tab", () => {
   assert.ok(!isBlockedKey(ev({ key: "Tab" })));                // plain Tab = chuyển ô nhập, cho phép
   assert.ok(!isBlockedKey(ev({ key: "Q", control: true, alt: true, shift: true }))); // escape hatch
   assert.ok(!isBlockedKey(ev({ key: "F12", type: "keyUp" }))); // keyUp ignored
+});
+
+test("keepOnTop: no-op khi trạng thái đã đúng (đang gõ → không chặn tiến trình chính)", () => {
+  // Trạng thái bình thường lúc thí sinh gõ: đang trên-cùng + kiosk + focus, không minimize.
+  const a = keepOnTopActions({ alwaysOnTop: true, kiosk: true, minimized: false, focused: true });
+  assert.strictEqual(a.setAlwaysOnTop, false);
+  assert.strictEqual(a.setKiosk, false);
+  assert.strictEqual(a.restore, false);
+  assert.strictEqual(a.refocus, false);
+});
+
+test("keepOnTop: giành lại khi z-order/focus bị đổi (vd sau Ctrl+Alt+Del)", () => {
+  const a = keepOnTopActions({ alwaysOnTop: false, kiosk: false, minimized: true, focused: false });
+  assert.strictEqual(a.setAlwaysOnTop, true);
+  assert.strictEqual(a.setKiosk, true);
+  assert.strictEqual(a.restore, true);
+  assert.strictEqual(a.refocus, true);
+  // Chỉ mất focus (đang trên-cùng + kiosk) → chỉ refocus, không đụng always-on-top/kiosk.
+  const b = keepOnTopActions({ alwaysOnTop: true, kiosk: true, minimized: false, focused: false });
+  assert.deepStrictEqual(b, { setAlwaysOnTop: false, setKiosk: false, restore: false, refocus: true });
 });
 
 test("window opts are kiosk + locked", () => {

@@ -8,7 +8,7 @@ const { loadConfig } = require("./config");
 const { discoverServer, queryMdns, healthCheck } = require("./discovery");
 const { startPolling, fetchCommand } = require("./control");
 const { checkForUpdate, fetchText, downloadFile } = require("./updater");
-const { isBlockedKey, KIOSK_WINDOW_OPTS } = require("./lockdown");
+const { isBlockedKey, keepOnTopActions, KIOSK_WINDOW_OPTS } = require("./lockdown");
 const { handleEmergencyVerify } = require("./quit");
 
 // --- vị trí file cạnh app (portable) ---
@@ -173,10 +173,19 @@ function keepOnTop() {
   // Khi cửa sổ thoát khẩn cấp đang mở, KHÔNG giành lại focus (để gõ được mật khẩu).
   if (emergencyWin && !emergencyWin.isDestroyed()) return;
   try {
-    win.setAlwaysOnTop(true, "screen-saver");
-    win.setKiosk(true);
-    if (win.isMinimized()) win.restore();
-    if (!win.isFocused()) { win.moveTop(); win.focus(); }
+    // Chỉ gọi API Windows khi trạng thái THỰC SỰ sai (xem keepOnTopActions) —
+    // lúc đang gõ bình thường mọi thứ đã đúng → không gọi gì → tiến trình chính
+    // rảnh để giao phím tức thì (fix giật 1-2s/phím trên máy yếu).
+    const a = keepOnTopActions({
+      alwaysOnTop: win.isAlwaysOnTop(),
+      kiosk: win.isKiosk(),
+      minimized: win.isMinimized(),
+      focused: win.isFocused(),
+    });
+    if (a.setAlwaysOnTop) win.setAlwaysOnTop(true, "screen-saver");
+    if (a.setKiosk) win.setKiosk(true);
+    if (a.restore) win.restore();
+    if (a.refocus) { win.moveTop(); win.focus(); }
   } catch (_e) { /* ignore */ }
 }
 
@@ -443,7 +452,9 @@ function createWindow() {
   // nên việc giữ-trên-cùng này không phá hộp thoại nào. keyblocker.exe lo chặn phím.)
   win.on("blur", keepOnTop);
   win.on("minimize", keepOnTop);
-  keepOnTopTimer = setInterval(keepOnTop, 600);
+  // Backstop 2s (đường phản ứng nhanh là sự kiện blur/minimize ở trên). keepOnTop
+  // giờ là no-op khi trạng thái đã đúng nên vòng này gần như không tốn gì.
+  keepOnTopTimer = setInterval(keepOnTop, 2000);
   win.loadFile(path.join(__dirname, "splash.html"));
   win.webContents.on("did-finish-load", () => {
     const url = win.webContents.getURL();
