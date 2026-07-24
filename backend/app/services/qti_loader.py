@@ -73,9 +73,20 @@ def _findall(elem: ET.Element, local_name: str) -> list[ET.Element]:
     return [e for e in elem.iter() if _localname(e.tag) == local_name]
 
 
+# Thẻ HTML khối → chèn ký tự xuống dòng khi bóc chữ, để nội dung nhiều đoạn của đề
+# QTI (vd phần "Xét nghiệm cận lâm sàng" nằm trong <div><p>…</p><p>…</p></div>)
+# xuống dòng đúng như file gốc thay vì dồn thành một dòng (AD-97).
+_BLOCK_TAGS = {"p", "div", "li", "ul", "ol", "tr", "table",
+               "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"}
+
+
 def _extract_text_and_images(elem: ET.Element, root_dir: str) -> tuple[str, list[dict]]:
     """Recursively walk ``elem`` (inclusive), returning plain text + any embedded
-    ``<img>`` files as base64. Image ``src`` resolved relative to ``root_dir``."""
+    ``<img>`` files as base64. Image ``src`` resolved relative to ``root_dir``.
+
+    Ranh giới thẻ khối (<p>, <div>…) và <br/> được chuyển thành ``\\n`` để giữ đúng
+    cấu trúc xuống dòng của đề; màn thi render với ``whitespace-pre-wrap`` nên các
+    ``\\n`` này hiển thị thành dòng mới (AD-97)."""
     text_parts: list[str] = []
     images: list[dict] = []
 
@@ -93,15 +104,29 @@ def _extract_text_and_images(elem: ET.Element, root_dir: str) -> tuple[str, list
             if e.tail:
                 text_parts.append(e.tail)
             return
+        if tag == "br":
+            text_parts.append("\n")
+            if e.tail:
+                text_parts.append(e.tail)
+            return
+        block = tag in _BLOCK_TAGS
+        if block:
+            text_parts.append("\n")
         if e.text:
             text_parts.append(e.text)
         for child in e:
             walk(child)
+        if block:
+            text_parts.append("\n")
         if e.tail:
             text_parts.append(e.tail)
 
     walk(elem)
-    text = " ".join(t.strip() for t in text_parts if t and t.strip())
+    # Ghép NGUYÊN (giữ \n), rồi chuẩn hoá: gộp khoảng trắng trong dòng, cắt lề mỗi
+    # dòng, gộp nhiều dòng trống liên tiếp thành một, bỏ dòng trống đầu/cuối.
+    raw = "".join(text_parts)
+    lines = [" ".join(ln.split()) for ln in raw.split("\n")]   # gộp khoảng trắng trong dòng
+    text = "\n".join(ln for ln in lines if ln)                 # bỏ dòng trống → mỗi ý 1 dòng
     return text, images
 
 
