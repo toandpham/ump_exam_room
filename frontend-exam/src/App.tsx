@@ -3,7 +3,7 @@ import axios from "axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MonitorX } from "lucide-react";
 import { examApi } from "./api/exam";
-import { PREFETCH_QUESTIONS, imageUrlsOf, preloadAllPaced, preloadImages } from "./lib/preload";
+import { PREFETCH_QUESTIONS, imageUrlsOf, preloadAllFast, preloadAllPaced, preloadImages } from "./lib/preload";
 import { useStore } from "./store";
 import { useExamSocket, type WsEvent } from "./hooks/useExamSocket";
 import LoginScreen from "./screens/LoginScreen";
@@ -122,16 +122,37 @@ function ExamShell() {
     preloadImages(imageUrlsOf(prefetch.data.questions.slice(0, PREFETCH_QUESTIONS)));
   }, [state?.status, prefetch.data]);
 
-  // AD-90c: nạp TOÀN BỘ ảnh đề xuống CACHE ĐĨA, rải chậm (~1 ảnh/giây, mỗi máy lệch
-  // giờ xuất phát) trong suốt lúc chờ bắt đầu và cả khi đang thi. Vào giờ làm bài
-  // hầu như không phải đụng tới mạng nữa, mà RAM vẫn nhẹ vì chỉ ảnh của câu đang
-  // hiển thị mới được giữ. Đổi 'ready' → 'in_progress' thì effect chạy lại: hàng đợi
-  // khởi động lại nhưng BỎ QUA ảnh đã tải (sổ `seen`), nên không tải trùng.
-  const warming = state?.status === "ready" || state?.status === "in_progress";
+  // AD-110: lúc CHỜ bắt đầu (ready — đã phát đề, đồng hồ chưa chạy) → tải NHANH
+  // toàn bộ ảnh đề về cache đĩa + báo tiến độ lên màn chờ. Dồn hết việc tải vào
+  // giai đoạn máy rảnh để vào thi không còn tải nền làm ì máy yếu ("khúc đầu
+  // chậm"). RAM vẫn nhẹ: chỉ tải bytes xuống đĩa, không giữ ảnh giải nén.
+  const [dl, setDl] = useState<{ done: number; total: number } | null>(null);
+  const preloadReportedFor = useRef<string | null>(null);   // phiên đã báo "tải xong"
   useEffect(() => {
-    if (!warming || !prefetch.data) return;
+    if (state?.status !== "ready" || !prefetch.data) return;
+    const sid = state.session_id;
+    return preloadAllFast(imageUrlsOf(prefetch.data.questions), (done, total) => {
+      setDl({ done, total });
+      // Tải đủ (kể cả đề không ảnh: 0/0) → báo server 1 lần cho phiên này; bảng
+      // giám sát đếm để chủ tịch biết khi nào mọi máy sẵn đề (gate Bắt đầu thi).
+      if (done >= total && sid && preloadReportedFor.current !== sid) {
+        preloadReportedFor.current = sid;
+        examApi.preloadDone().catch(() => {
+          preloadReportedFor.current = null;   // lỗi mạng → thử lại ở tick tải kế / poll sau
+          setTimeout(() => { void examApi.preloadDone().then(
+            () => { preloadReportedFor.current = sid; }).catch(() => {}); }, 5000);
+        });
+      }
+    });
+  }, [state?.status, state?.session_id, prefetch.data]);
+
+  // AD-90c: ĐANG THI thì chỉ còn luồng rải chậm (~1 ảnh/giây) vét phần sót — máy
+  // vào trễ / mất mạng lúc chờ. Hàng đợi bỏ qua ảnh đã tải (sổ `seen`) nên máy đã
+  // tải đủ lúc chờ sẽ không đụng mạng nữa.
+  useEffect(() => {
+    if (state?.status !== "in_progress" || !prefetch.data) return;
     return preloadAllPaced(imageUrlsOf(prefetch.data.questions));
-  }, [warming, prefetch.data]);
+  }, [state?.status, prefetch.data]);
 
   // ONE socket per candidate (AD-14): ExamShell owns it. Every control event
   // refreshes state (instant distribute/start/end transitions) and is forwarded
@@ -184,7 +205,7 @@ function ExamShell() {
     case "waiting":
       return <StatusScreen variant="waiting" />;
     case "ready":
-      return <StatusScreen variant="ready" />;
+      return <StatusScreen variant="ready" download={dl} />;
     case "in_progress":
       // SP-2c: nếu chưa tới mốc bắt đầu chung → đếm ngược đồng bộ (đề đã prefetch,
       // mở tức thì khi tới giờ). CountdownScreen tự gọi onStart ngay nếu đã qua giờ.

@@ -40,7 +40,12 @@ const seen = new Set<string>();
 
 /** Chạy một hàng đợi tải ảnh. ``pace()`` trả số ms nghỉ giữa 2 ảnh (0 = liên tục).
  * Trả về hàm HUỶ (dừng ngay, dọn hẹn giờ). */
-function startQueue(urls: string[], pace: () => number, concurrency: number): () => void {
+function startQueue(
+  urls: string[],
+  pace: () => number,
+  concurrency: number,
+  onLoaded?: () => void,
+): () => void {
   const queue = [...new Set(urls.filter(Boolean))];
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let cancelled = false;
@@ -58,6 +63,7 @@ function startQueue(urls: string[], pace: () => number, concurrency: number): ()
     const img = new Image();
     img.onload = img.onerror = () => {
       if (cancelled) return;
+      onLoaded?.();
       const wait = pace();
       if (wait <= 0) { next(); return; }
       const t = setTimeout(() => { timers.delete(t); next(); }, wait);
@@ -77,6 +83,28 @@ function startQueue(urls: string[], pace: () => number, concurrency: number): ()
 /** Tải ngay một nhúm ảnh (vài câu quanh chỗ thí sinh đang đứng). */
 export function preloadImages(urls: string[]): void {
   startQueue(urls, () => 0, CONCURRENCY);
+}
+
+/** AD-110: nạp TOÀN BỘ ảnh đề NHANH trong lúc CHỜ bắt đầu (đã phát đề, đồng hồ
+ * chưa chạy) — dồn hết việc tải vào giai đoạn máy đang rảnh, để lúc thi không còn
+ * tải nền làm ì máy yếu ("khúc đầu chậm, một hồi mới mượt"). Nghỉ rất ngắn giữa 2
+ * ảnh (jitter) để 400 máy không khoá nhịp với nhau. Báo tiến độ qua ``onProgress``
+ * (done/total, tính cả ảnh đã nằm sẵn trong cache) → màn chờ hiện "Đã tải X/Y".
+ * Trả về hàm huỷ. */
+export function preloadAllFast(
+  urls: string[],
+  onProgress?: (done: number, total: number) => void,
+): () => void {
+  const unique = [...new Set(urls.filter(Boolean))];
+  const total = unique.length;
+  let done = unique.filter((u) => seen.has(u)).length;   // đã có từ luồng khác
+  onProgress?.(done, total);
+  return startQueue(
+    unique,
+    () => 50 + Math.random() * 150,
+    2,
+    () => onProgress?.(++done, total),
+  );
 }
 
 /** Nạp TOÀN BỘ ảnh đề xuống cache đĩa, rải chậm. Trả về hàm huỷ. */

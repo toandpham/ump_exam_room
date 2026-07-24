@@ -6,6 +6,8 @@ import { photoUrl, useStore } from "../store";
 interface Props {
   variant: "waiting" | "ready" | "result";
   submittedAt?: string | null;
+  // AD-110: tiến độ tải đề về máy lúc chờ (null = chưa có số liệu / đề không ảnh).
+  download?: { done: number; total: number } | null;
 }
 
 interface ResultData {
@@ -20,7 +22,7 @@ interface ResultData {
 // sau) — không cần giám thị thao tác (AD-69).
 const AUTO_LOGOUT_SECONDS = 30;
 
-export default function StatusScreen({ variant, submittedAt }: Props) {
+export default function StatusScreen({ variant, submittedAt, download }: Props) {
   const { candidate, exam, logout } = useStore();
   const [result, setResult] = useState<ResultData | null>(null);
   const [loadingResult, setLoadingResult] = useState(false);
@@ -134,6 +136,22 @@ export default function StatusScreen({ variant, submittedAt }: Props) {
         <p className="text-slate-500 mt-1">{content.sub}</p>
         {variant === "ready" && exam && (
           <p className="mt-4 text-sm text-slate-600">Thời gian làm bài: <strong>{exam.duration_minutes} phút</strong></p>
+        )}
+        {/* AD-110: tiến độ tải đề về máy trong lúc chờ — tải xong mới nên bắt đầu thi. */}
+        {variant === "ready" && download && (
+          download.done >= download.total ? (
+            <p className="mt-3 text-sm font-semibold text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+              ✓ Đề đã tải đủ về máy — sẵn sàng thi
+            </p>
+          ) : (
+            <div className="mt-3 text-sm text-slate-600">
+              <p>Đang tải đề về máy… <strong>{download.done}/{download.total}</strong></p>
+              <div className="mt-1.5 h-2 bg-slate-200 rounded overflow-hidden">
+                <div className="h-full bg-blue-500 transition-all"
+                  style={{ width: `${download.total ? Math.round((download.done / download.total) * 100) : 100}%` }} />
+              </div>
+            </div>
+          )
         )}
       </div>
     </div>

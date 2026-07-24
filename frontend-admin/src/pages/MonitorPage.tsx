@@ -106,6 +106,12 @@ export default function MonitorPage() {
   const examOver = hasFinished && !hasRunning;
   // SP-2b: waitingCount không còn dùng (confirm → READY tự động); chỉ cần readyCount.
   const readyCount = counts.ready ?? 0;
+  // AD-110: chỉ cho Bắt đầu thi khi MỌI máy sẵn sàng đã tải xong đề (máy thí sinh
+  // tự báo về lúc chờ). Máy hỏng/tắt ngang không bao giờ báo → có đường
+  // "bỏ qua kiểm tra" riêng (confirm cảnh báo) để 1 máy chết không kẹt cả phòng.
+  const readySessions = sessions.filter((s) => s.status === "ready");
+  const loadedCount = readySessions.filter((s) => s.preloaded).length;
+  const allLoaded = readySessions.length > 0 && loadedCount >= readySessions.length;
   const canStart = hasExam && readyCount > 0 && !examOver;
 
   return (
@@ -142,10 +148,25 @@ export default function MonitorPage() {
               (r) => r.started
                 ? `▶ Đã bắt đầu thi cho ${r.started} thí sinh. Đồng hồ đang chạy.`
                 : "ℹ️ Chưa có thí sinh nào xác nhận thông tin.",
-              "Bạn có chắc muốn BẮT ĐẦU THI?\n\nĐồng hồ sẽ chạy cho tất cả thí sinh sẵn sàng. Mỗi thí sinh có đồng hồ riêng và tự nộp khi hết giờ.",
+              "Bạn có chắc muốn BẮT ĐẦU THI?\n\nMọi máy đã tải đủ đề. Đồng hồ sẽ chạy cho tất cả thí sinh sẵn sàng; mỗi thí sinh có đồng hồ riêng và tự nộp khi hết giờ.",
             )}
-            disabled={!canStart}
+            disabled={!canStart || !allLoaded}
             icon={Play} label="Bắt đầu thi" green />
+          {/* AD-110: van an toàn — máy hỏng/tắt ngang không bao giờ báo "đã tải đề",
+              không có nút này thì 1 máy chết kẹt cả phòng. */}
+          {canStart && !allLoaded && (
+            <button
+              onClick={ctrl(
+                () => start.mutateAsync(),
+                (r) => `▶ Đã bắt đầu thi cho ${r.started} thí sinh (bỏ qua kiểm tra tải đề).`,
+                `⚠️ CÒN ${readySessions.length - loadedCount} MÁY CHƯA TẢI XONG ĐỀ.\n\nCác máy đó có thể bị chậm/thiếu hình lúc đầu giờ. Chỉ nên bỏ qua khi máy đó đã hỏng/không dùng.\n\nVẫn BẮT ĐẦU THI ngay?`,
+              )}
+              className="text-xs text-amber-700 underline underline-offset-2 hover:text-amber-900"
+              title="Chỉ dùng khi có máy hỏng không thể tải đề"
+            >
+              Vẫn bắt đầu (bỏ qua {readySessions.length - loadedCount} máy chưa tải đề)
+            </button>
+          )}
           {hasRunning && (anyPaused ? (
             <CtrlBtn
               onClick={ctrl(() => resumeAll.mutateAsync(),
@@ -167,9 +188,12 @@ export default function MonitorPage() {
             <span className="text-xs text-green-700">→ Đang thi. Tạm dừng/Tiếp tục từng thí sinh ở bảng bên dưới.</span>
           ) : readyCount === 0 ? (
             <span className="text-xs text-slate-500">→ Đợi thí sinh đăng nhập + xác nhận</span>
+          ) : !allLoaded ? (
+            // AD-110: chờ mọi máy tải xong đề rồi mới cho bắt đầu.
+            <span className="text-xs text-amber-700">→ Đã tải đề <strong>{loadedCount}/{readySessions.length}</strong> máy — chờ đủ mới bắt đầu được</span>
           ) : (
             // SP-2b: confirm → READY tự động, không cần bước phân phối thủ công.
-            <span className="text-xs text-green-700">→ {readyCount} thí sinh đã sẵn sàng — bấm <strong>Bắt đầu thi</strong></span>
+            <span className="text-xs text-green-700">→ {readyCount} thí sinh sẵn sàng, <strong>đề đã tải đủ {loadedCount}/{readySessions.length} máy</strong> — bấm <strong>Bắt đầu thi</strong></span>
           )}
         </div>
       )}

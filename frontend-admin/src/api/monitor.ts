@@ -16,6 +16,8 @@ export interface SessionSummary {
   self_registered: boolean;
   room_id: string | null;
   room_name: string | null;
+  // AD-110: máy đã tải xong toàn bộ ảnh đề (báo về từ máy thí sinh lúc chờ).
+  preloaded: boolean;
 }
 
 export interface RosterCandidate {

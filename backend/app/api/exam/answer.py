@@ -173,6 +173,20 @@ async def get_questions(
     )
 
 
+@router.post("/preload-done")
+async def preload_done(
+    candidate: Candidate = Depends(get_current_candidate),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """AD-110: máy thí sinh báo 'đã tải xong toàn bộ ảnh đề về cache'. Bảng giám
+    sát đếm cờ này → chủ tịch chỉ bấm 'Bắt đầu thi' khi mọi máy đã sẵn đề.
+    Idempotent; TTL 12h (sống hết buổi, tự dọn)."""
+    session = await _current_session(db, candidate)
+    if session.status in {SessionStatus.READY.value, SessionStatus.IN_PROGRESS.value}:
+        await redis_client.set(session_service.preload_key(session.id), "1", ex=12 * 3600)
+    return {"ok": True}
+
+
 @router.post("/answer", response_model=AnswerOut)
 async def save_answer(
     body: AnswerIn,

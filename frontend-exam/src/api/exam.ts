@@ -87,6 +87,8 @@ export const examApi = {
   me: async (): Promise<LoginResponse> => (await api.get("/exam/me")).data,
   state: async (): Promise<SessionState> => (await api.get("/exam/state")).data,
   questions: async (): Promise<QuestionsResponse> => (await api.get("/exam/questions")).data,
+  // AD-110: báo server "máy này đã tải xong toàn bộ ảnh đề" (gate nút Bắt đầu thi).
+  preloadDone: async () => (await api.post("/exam/preload-done")).data,
   answer: async (question_id: string, selected_option: string | null) =>
     (await api.post("/exam/answer", { question_id, selected_option })).data,
   // AD-69: đẩy đáp án theo LÔ (giảm số request xuống server).

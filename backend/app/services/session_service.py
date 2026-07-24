@@ -45,6 +45,13 @@ def report_cache_key(sitting_id) -> str:
     return f"sitting:{sitting_id}:report"
 
 
+def preload_key(session_id) -> str:
+    """Cờ 'máy đã tải xong toàn bộ ảnh đề' của một phiên (AD-110). Máy thí sinh
+    báo về khi tải đủ lúc CHỜ bắt đầu; bảng giám sát đếm để chủ tịch chỉ bấm
+    'Bắt đầu thi' khi mọi máy đã sẵn đề (hết cảnh khúc đầu buổi thi ì vì tải nền)."""
+    return f"preload_done:{session_id}"
+
+
 async def get_sitting_payload(redis, sitting_id) -> dict | None:
     """Load and parse a sitting's decrypted đề payload from Redis (None if absent)."""
     raw = await redis.get(payload_key(sitting_id))

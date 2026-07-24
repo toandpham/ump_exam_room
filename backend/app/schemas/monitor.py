@@ -51,6 +51,9 @@ class SessionSummary(BaseModel):
     paused: bool = False
     room_id: uuid.UUID | None = None
     room_name: str | None = None
+    # AD-110: máy đã tải xong toàn bộ ảnh đề (cờ Redis do máy thí sinh báo về) —
+    # chủ tịch chỉ nên Bắt đầu thi khi mọi máy ready đều True.
+    preloaded: bool = False
 
 
 class RosterCandidate(BaseModel):

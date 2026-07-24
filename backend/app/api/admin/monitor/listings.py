@@ -110,6 +110,13 @@ async def list_sessions(
     if room_ids is not None:
         stmt = stmt.where(Candidate.room_id.in_(room_ids))
     rows_list = (await db.execute(stmt)).all()
+    # AD-110: đọc lô cờ "đã tải xong đề" (máy thí sinh báo về) — 1 cú MGET.
+    from app.core.redis import redis_client
+    flags: list = []
+    if rows_list:
+        flags = await redis_client.mget(
+            [session_service.preload_key(s.id) for s, _, _ in rows_list])
+    preloaded_by_idx = {i: bool(v) for i, v in enumerate(flags)}
     return [
         SessionSummary(
             session_id=s.id, candidate_id=c.id, cccd=c.cccd, full_name=c.full_name,
@@ -122,8 +129,9 @@ async def list_sessions(
             self_registered=c.self_registered,
             paused=s.paused_at is not None,
             room_id=c.room_id, room_name=room_name,
+            preloaded=preloaded_by_idx.get(i, False),
         )
-        for s, c, room_name in rows_list
+        for i, (s, c, room_name) in enumerate(rows_list)
     ]
 
 
