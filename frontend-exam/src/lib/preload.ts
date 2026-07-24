@@ -9,15 +9,13 @@
  * đọc lại từ đĩa, không hỏi server). RAM chỉ giữ ảnh của câu đang hiển thị.
  *
  * Ba luồng nạp, dùng chung sổ ``seen`` nên không tải trùng:
- *  1. ``preloadImages`` — vài câu ĐẦU, tải ngay (lúc đề sẵn sàng).
- *  2. ``preloadAllPaced`` — TOÀN BỘ đề, rải chậm trong lúc chờ bắt đầu: mỗi máy
- *     lệch giờ xuất phát + giãn nhịp từng ảnh, để 400 máy không dồn vào mạng.
+ *  1. ``preloadAllFast`` — TOÀN BỘ đề, tải nhanh lúc CHỜ bắt đầu (AD-110) + báo
+ *     tiến độ (màn chờ hiện "Đang tải đề X/Y", đủ thì báo server mở nút Bắt đầu).
+ *  2. ``preloadAllPaced`` — TOÀN BỘ đề, rải chậm TRONG giờ thi (vét máy vào trễ):
+ *     mỗi máy lệch giờ xuất phát + giãn nhịp từng ảnh, 400 máy không dồn mạng.
  *  3. ``preloadImages`` cho vài câu KẾ TIẾP (ExamScreen) — chen lên trước hàng đợi
  *     rải chậm khi thí sinh sắp tới câu đó.
  */
-
-/** Số câu ĐẦU đề được nạp ảnh ngay khi đề sẵn sàng. */
-export const PREFETCH_QUESTIONS = 12;
 
 /** Số câu KẾ TIẾP được nạp ảnh trước khi thí sinh tới. (AD-106: 3→6 — hiện trường
  * báo "hình lúc nhanh lúc chậm" = thí sinh đi nhanh hơn luồng nạp; ảnh đã thu nhỏ
@@ -45,6 +43,7 @@ function startQueue(
   pace: () => number,
   concurrency: number,
   onLoaded?: () => void,
+  onSkipped?: () => void,
 ): () => void {
   const queue = [...new Set(urls.filter(Boolean))];
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -57,6 +56,10 @@ function startQueue(
     while (i < queue.length) {
       const u = queue[i++];
       if (!seen.has(u)) { url = u; break; }     // ảnh đã tải ở luồng khác → bỏ qua
+      // Fix kẹt "34/37" (AD-110b): ảnh bị luồng khác nẫng vẫn phải ĐƯỢC ĐẾM vào
+      // tiến độ — không thì done không bao giờ chạm total → không báo preload-done
+      // → nút Bắt đầu thi bên chủ tịch kẹt vĩnh viễn.
+      onSkipped?.();
     }
     if (url === undefined) return;              // hết hàng đợi
     seen.add(url);
@@ -97,14 +100,13 @@ export function preloadAllFast(
 ): () => void {
   const unique = [...new Set(urls.filter(Boolean))];
   const total = unique.length;
-  let done = unique.filter((u) => seen.has(u)).length;   // đã có từ luồng khác
-  onProgress?.(done, total);
-  return startQueue(
-    unique,
-    () => 50 + Math.random() * 150,
-    2,
-    () => onProgress?.(++done, total),
-  );
+  // Đếm qua CHÍNH hàng đợi: mỗi URL được ghé đúng 1 lần — hoặc tự tải (onLoaded)
+  // hoặc đã có luồng khác lo (onSkipped). Không đếm trước theo `seen` nữa (bản cũ
+  // vừa đếm trước vừa bỏ-qua-không-đếm ảnh bị nẫng SAU snapshot → kẹt 34/37).
+  let done = 0;
+  onProgress?.(0, total);
+  const bump = () => onProgress?.(++done, total);
+  return startQueue(unique, () => 50 + Math.random() * 150, 2, bump, bump);
 }
 
 /** Nạp TOÀN BỘ ảnh đề xuống cache đĩa, rải chậm. Trả về hàm huỷ. */

@@ -88,6 +88,44 @@ describe("preloadAllPaced (nạp cả đề xuống cache đĩa, rải chậm)",
   });
 });
 
+describe("preloadAllFast (tải nhanh cả đề lúc chờ + tiến độ)", () => {
+  it("tải hết và tiến độ chạm ĐÚNG total", async () => {
+    const { preloadAllFast } = await freshModule();
+    const seen: Array<[number, number]> = [];
+    preloadAllFast(["a.jpg", "b.jpg", "c.jpg"], (d, t) => seen.push([d, t]));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(loaded.sort()).toEqual(["a.jpg", "b.jpg", "c.jpg"]);
+    expect(seen[seen.length - 1]).toEqual([3, 3]);
+  });
+
+  it("BUG 34/37: ảnh bị luồng khác nẫng GIỮA CHỪNG vẫn được đếm — tiến độ chạm total", async () => {
+    const { preloadImages, preloadAllFast } = await freshModule();
+    // Kịch bản hiện trường: 2 luồng chạy SONG SONG lúc chờ. Luồng phụ đang tải
+    // a,b và còn e xếp hàng; luồng tải-cả-đề khởi động cùng lúc...
+    preloadImages(["a.jpg", "b.jpg", "e.jpg"]);   // concurrency 2 → a,b đang tải; e chờ
+    let last: [number, number] | null = null;
+    preloadAllFast(
+      ["a.jpg", "b.jpg", "c.jpg", "d.jpg", "e.jpg", "f.jpg"],
+      (d, t) => { last = [d, t]; },
+    );
+    // ...a tải xong → luồng phụ NẪNG e (sau khi luồng nhanh đã chốt sổ ban đầu).
+    // Bản cũ: e bị bỏ-qua-không-đếm → kẹt 5/6 vĩnh viễn (= kẹt 34/37, nút Bắt đầu
+    // thi không mở khoá). Bản vá: mỗi URL được ghé đúng 1 lần — tải hoặc "đã có
+    // người tải" đều đếm → phải chạm 6/6.
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(loaded.filter((u) => u === "e.jpg").length).toBe(1);   // không tải trùng
+    expect(loaded.sort()).toEqual(["a.jpg", "b.jpg", "c.jpg", "d.jpg", "e.jpg", "f.jpg"]);
+    expect(last).toEqual([6, 6]);
+  });
+
+  it("đề không có ảnh → báo 0/0 ngay (coi như tải xong)", async () => {
+    const { preloadAllFast } = await freshModule();
+    let last: [number, number] | null = null;
+    preloadAllFast([], (d, t) => { last = [d, t]; });
+    expect(last).toEqual([0, 0]);
+  });
+});
+
 describe("imageUrlsOf", () => {
   it("gom ảnh của cả câu hỏi lẫn đáp án, đúng thứ tự", async () => {
     const { imageUrlsOf } = await freshModule();

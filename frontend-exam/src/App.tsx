@@ -3,7 +3,7 @@ import axios from "axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MonitorX } from "lucide-react";
 import { examApi } from "./api/exam";
-import { PREFETCH_QUESTIONS, imageUrlsOf, preloadAllFast, preloadAllPaced, preloadImages } from "./lib/preload";
+import { imageUrlsOf, preloadAllFast, preloadAllPaced } from "./lib/preload";
 import { useStore } from "./store";
 import { useExamSocket, type WsEvent } from "./hooks/useExamSocket";
 import LoginScreen from "./screens/LoginScreen";
@@ -111,16 +111,9 @@ function ExamShell() {
     staleTime: Infinity,
     retry: false,
   });
-  useEffect(() => {
-    if (state?.status !== "ready" || !prefetch.data) return;
-    // Warm cache trình duyệt cho ẢNH của VÀI CÂU ĐẦU thôi (AD-90).
-    // Trước đây nạp ảnh của TOÀN BỘ đề (280 câu) trên MỌI máy cùng lúc lúc phát đề:
-    //  - mạng: 400 máy × cả bộ ảnh dồn trong vài giây → nghẽn switch;
-    //  - máy yếu (Win7/4GB): giữ toàn bộ ảnh đã giải nén trong RAM → swap → ì ạch.
-    // Ảnh các câu sau được nạp dần khi thí sinh tới gần (xem ExamScreen) — vẫn tức
-    // thì vì đây là mạng LAN nội bộ.
-    preloadImages(imageUrlsOf(prefetch.data.questions.slice(0, PREFETCH_QUESTIONS)));
-  }, [state?.status, prefetch.data]);
+  // (AD-110b: luồng "nạp ảnh 12 câu đầu" lúc ready ĐÃ BỎ — preloadAllFast dưới đây
+  // phủ toàn bộ ngay từ giây đầu theo đúng thứ tự câu; 2 luồng chạy song song từng
+  // đua nhau nẫng ảnh làm tiến độ kẹt 34/37 → nút Bắt đầu thi không mở khoá.)
 
   // AD-110: lúc CHỜ bắt đầu (ready — đã phát đề, đồng hồ chưa chạy) → tải NHANH
   // toàn bộ ảnh đề về cache đĩa + báo tiến độ lên màn chờ. Dồn hết việc tải vào
