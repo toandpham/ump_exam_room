@@ -109,8 +109,16 @@ while true; do
     else
       refresh_heads
       FINISHED_AT=$(now_iso)
-      # update.sh tự chặn khi đang thi / pull fail… — lý do nằm trong log_tail.
-      LAST_STATE="failed"; LAST_MSG="Cập nhật không chạy — xem chi tiết bên dưới."
+      LAST_STATE="failed"
+      # Lý do chặn phổ biến nhất (chốt an toàn AD-82: đang có thí sinh thi) phải
+      # NHẢY THẲNG lên tiêu đề — trước đây nó lẫn trong log, người vận hành bấm
+      # Cập nhật xong không hiểu vì sao không chạy (hiện trường 24-07).
+      BLOCK=$(tail -n 25 "$LOG" | grep -o "Đang có [0-9]* thí sinh đang thi" | tail -1 || true)
+      if [ -n "$BLOCK" ]; then
+        LAST_MSG="⛔ $BLOCK — hãy ĐÓNG BUỔI thi (hoặc chờ thi xong) rồi bấm Cập nhật lại."
+      else
+        LAST_MSG="Cập nhật không chạy — xem chi tiết bên dưới."
+      fi
     fi
     write_state "$LAST_STATE" "$LAST_MSG"
   else
