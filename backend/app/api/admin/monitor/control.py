@@ -188,7 +188,13 @@ async def close_exam(
 
 
 KIOSK_QUIT_TTL_SECONDS = 60
-KIOSK_WIPE_TTL_SECONDS = 300   # SP-4: đủ lâu để máy reconnect trong 5' vẫn nhận lệnh xoá
+# AD-114: cờ wipe sống TỚI KHI MỞ BUỔI KẾ (mở buổi chủ động xoá cờ — sittings.py).
+# Bản cũ TTL 300s tạo lỗ hổng thật ngoài hiện trường: máy TẮT lúc đóng buổi, sáng
+# hôm sau bật lên → cờ đã hết hạn → token cũ trong localStorage tự đăng nhập lại
+# CCCD của thí sinh trước. TTL dài thì mọi máy boot trong khoảng "giữa 2 buổi" đều
+# được xoá sạch (token + cache đề) về màn đăng nhập; không lo wipe nhầm giữa giờ
+# thi vì cờ bị XOÁ ngay khi mở buổi.
+KIOSK_WIPE_TTL_SECONDS = 48 * 3600
 
 
 @router.post("/exams/{exam_id}/kiosk-quit")
@@ -201,10 +207,10 @@ async def kiosk_quit(
     """Thoát tất cả máy thi: set a short-lived Redis flag that every kiosk machine
     of this exam polls (GET /api/exam/kiosk/command). Ownership-gated (AD-30).
 
-    LƯU Ý: máy nhận lệnh này sẽ **KHỞI ĐỘNG LẠI** (AD-77c: thoát kiosk = reboot để
-    Windows trả lại desktop sạch). Vì vậy AD-92 chặn cứng khi CÒN NGƯỜI ĐANG THI —
-    một cú bấm nhầm sẽ reboot toàn bộ phòng đang làm bài. Muốn vẫn gửi (máy treo,
-    cần dọn phòng gấp) thì gọi lại với ``force=true``.
+    LƯU Ý: kiosk từ v1.3.0 (AD-93) nhận lệnh này sẽ ĐÓNG phần mềm thi về desktop
+    (KHÔNG reboot); máy chạy bản cũ hơn vẫn reboot. AD-92 chặn cứng khi CÒN NGƯỜI
+    ĐANG THI — một cú bấm nhầm sẽ văng thí sinh khỏi bài toàn phòng. Muốn vẫn gửi
+    (máy treo, cần dọn phòng gấp) thì gọi lại với ``force=true``.
     """
     await exam_for_admin(db, exam_id, admin)  # ownership gate (404 if not owner)
     if not force:
