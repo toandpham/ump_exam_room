@@ -15,6 +15,10 @@ const DEFAULTS = {
                                     // Mặc định false = BẬT GPU (mượt hơn nhiều trên
                                     // máy yếu). Đặt true cho máy nào bật GPU bị lỗi
                                     // (app tự phát hiện + tự tắt nên hiếm khi cần).
+  disableKeyblocker: false,         // AD-103: true = KHÔNG chạy keyblocker.exe (hook
+                                    // bàn phím toàn hệ thống). CHỈ dùng để chẩn đoán
+                                    // lag trên 1 máy test — tắt nó là mất chặn phím
+                                    // Win/Alt+Tab, KHÔNG dùng khi thi thật.
 };
 
 function loadConfig(filePath, readFile = fs.readFileSync) {
@@ -38,6 +42,7 @@ function loadConfig(filePath, readFile = fs.readFileSync) {
   cfg.serverIp = String(cfg.serverIp ?? "").trim();   // "" = không đặt (chỉ mDNS)
   cfg.path = String(cfg.path || DEFAULTS.path);
   cfg.disableGpu = cfg.disableGpu === true;   // chỉ true khi khai đúng boolean true
+  cfg.disableKeyblocker = cfg.disableKeyblocker === true;
   return cfg;
 }
 

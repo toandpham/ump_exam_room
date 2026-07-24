@@ -9,6 +9,7 @@ const { discoverServer, queryMdns, healthCheck } = require("./discovery");
 const { startPolling, fetchCommand } = require("./control");
 const { checkForUpdate, fetchText, downloadFile } = require("./updater");
 const { isBlockedKey, keepOnTopActions, KIOSK_WINDOW_OPTS } = require("./lockdown");
+const { createPerf } = require("./perf");
 const { handleEmergencyVerify } = require("./quit");
 
 // --- vị trí file cạnh app (portable) ---
@@ -146,6 +147,7 @@ let emergencyWin = null; // cửa sổ thoát khẩn cấp (sở hữu bởi mai
 let stopPolling = null;
 let serverBase = null;   // http://<ip>
 let quitting = false;    // true khi đang thoát hợp lệ
+let perf = null;         // AD-103: bộ đo nghẽn tiến trình chính (perf.log trong userData)
 let keepOnTopTimer = null; // handle setInterval(keepOnTop) để clear khi thoát
 let retryTimer = null;   // hẹn giờ thử nạp lại trang khi mất kết nối (did-fail-load)
 let failCount = 0;       // số lần nạp trang thi thất bại liên tiếp
@@ -366,6 +368,8 @@ function quitForUpdate() {
 function applyLockdown(wc) {
   // Chặn phím.
   wc.on("before-input-event", (event, input) => {
+    // AD-103: ghi mốc phím tới tiến trình chính (đo lag gõ trên máy yếu).
+    if (perf && input.type === "keyDown") perf.key();
     // Lối thoát khẩn cấp Ctrl+Alt+Shift+Q.
     if (input.type === "keyDown" && input.control && input.alt && input.shift &&
         (input.key || "").toUpperCase() === "Q") {
@@ -528,8 +532,15 @@ if (!app.requestSingleInstanceLock()) {
     if (sentinelExists()) setTaskMgr(false);
     setTaskMgr(true);
     markLockdown(true);
-    startKeyBlocker();
+    // AD-103: cờ chẩn đoán — tắt keyblocker để A/B lag trên 1 máy test (mất chặn
+    // Win/Alt+Tab, KHÔNG dùng khi thi thật).
+    if (cfg.disableKeyblocker) console.warn("[KIOSK] disableKeyblocker=true — KHÔNG chạy keyblocker.exe (chỉ để chẩn đoán)");
+    else startKeyBlocker();
     createWindow();
+    // AD-103: máy đo nghẽn tiến trình chính → %APPDATA%/<app>/perf.log. Chỉ ghi
+    // BẤT THƯỜNG (stall/keygap) nên file nhỏ; đọc sau khi thoát kiosk.
+    perf = createPerf({ file: path.join(app.getPath("userData"), "perf.log") });
+    perf.start(`v${app.getVersion()} keyblocker=${cfg.disableKeyblocker ? "off" : "on"} gpu=${gpuDisabled ? "off" : "on"}`);
     // Đăng ký nuốt mọi tổ hợp có thể ở tầng hệ thống (best-effort: một số tổ hợp
     // Windows giữ riêng — RegisterHotKey sẽ thất bại, ta bỏ qua; tuyến chính vẫn là
     // refocus() ở trên).
@@ -556,6 +567,7 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
   app.on("will-quit", () => {
+    if (perf) { perf.stop(); perf = null; }
     globalShortcut.unregisterAll();
     if (keepOnTopTimer) { clearInterval(keepOnTopTimer); keepOnTopTimer = null; }
     if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }

@@ -1,6 +1,6 @@
 {
   "name": "exam-kiosk",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Trình duyệt thi khoá màn hình cho Windows 7→11 — AD-66/76",
   "main": "src/main.js",
   "scripts": {
@@ -26,13 +26,21 @@
       "src/**/*"
     ],
     "extraResources": [
-      { "from": "resources/keyblocker.exe", "to": "keyblocker.exe" }
+      {
+        "from": "resources/keyblocker.exe",
+        "to": "keyblocker.exe"
+      }
     ],
     "win": {
       "icon": "build/icon.ico",
       "requestedExecutionLevel": "requireAdministrator",
       "target": [
-        { "target": "nsis", "arch": ["ia32"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "ia32"
+          ]
+        }
       ]
     },
     "nsis": {
