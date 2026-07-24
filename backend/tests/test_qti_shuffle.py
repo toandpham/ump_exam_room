@@ -139,5 +139,5 @@ def test_loader_rejects_qti_selection(tmp_path):
   </qti-test-part>
 </qti-assessment-test>
 """)
-    with pytest.raises(QtiLoadError, match="qti-selection"):
+    with pytest.raises(QtiLoadError, match="selection"):
         qti_loader.load_qti_package(root)

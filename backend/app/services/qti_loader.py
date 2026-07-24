@@ -1,7 +1,20 @@
-"""Load an IMS QTI 3.0 content package and convert it to the internal exam
-payload format used by the rest of the system.
+"""Load an IMS QTI content package (3.0 hoặc 2.1) và chuyển thành payload đề nội
+bộ dùng cho phần còn lại của hệ thống.
 
-Package layout (per the QTI 3.0 spec — https://www.1edtech.org/standards/qti):
+Hỗ trợ CẢ HAI phiên bản chuẩn QTI:
+  * QTI 3.0 — tên phần tử kebab-case có tiền tố ``qti-`` (``qti-assessment-item``,
+    ``qti-choice-interaction``, ``qti-simple-choice``…), thuộc tính ``max-choices``,
+    ``response-identifier``…
+  * QTI 2.1 — tên phần tử camelCase KHÔNG tiền tố (``assessmentItem``,
+    ``choiceInteraction``, ``simpleChoice``…), thuộc tính ``maxChoices``,
+    ``responseIdentifier``…
+
+Cấu trúc logic của 2 phiên bản GIỐNG NHAU (1 đáp án đúng, 4 lựa chọn A–D, ảnh
+inline ``<img>``); chỉ khác cách gọi tên nên loader khớp cả 2 bộ tên ở mỗi chỗ
+(xem các hằng ``_TAG_*`` và ``_attr``). Namespace bị bỏ qua hoàn toàn
+(so khớp theo localname) nên khác biệt namespace giữa 2 chuẩn không ảnh hưởng.
+
+Package layout (giống nhau ở cả 3.0 và 2.1 — https://www.1edtech.org/standards/qti):
 
     <root>/
       imsmanifest.xml            <- lists every resource
@@ -52,6 +65,21 @@ _MIME = {
 
 _OPTION_IDS = ("A", "B", "C", "D")
 
+# Tên phần tử tương đương giữa QTI 3.0 (kebab-case, tiền tố ``qti-``) và QTI 2.1
+# (camelCase, không tiền tố). Mỗi lookup chấp nhận CẢ HAI để tương thích ngược.
+_TAG_ITEM = ("qti-assessment-item", "assessmentItem")
+_TAG_ITEM_BODY = ("qti-item-body", "itemBody")
+_TAG_INTERACTION = ("qti-choice-interaction", "choiceInteraction")
+_TAG_CHOICE = ("qti-simple-choice", "simpleChoice")
+_TAG_RESP_DECL = ("qti-response-declaration", "responseDeclaration")
+_TAG_CORRECT = ("qti-correct-response", "correctResponse")
+_TAG_VALUE = ("qti-value", "value")
+_TAG_ITEM_REF = ("qti-assessment-item-ref", "assessmentItemRef")
+_TAG_ORDERING = ("qti-ordering", "ordering")
+_TAG_SELECTION = ("qti-selection", "selection")
+_TAG_SECTION = ("qti-assessment-section", "assessmentSection")
+_TAG_TIME_LIMITS = ("qti-time-limits", "timeLimits")
+
 
 class QtiLoadError(Exception):
     """Malformed or unsupported QTI package."""
@@ -69,8 +97,18 @@ def _find(elem: ET.Element, *local_names: str) -> ET.Element | None:
     return None
 
 
-def _findall(elem: ET.Element, local_name: str) -> list[ET.Element]:
-    return [e for e in elem.iter() if _localname(e.tag) == local_name]
+def _findall(elem: ET.Element, *local_names: str) -> list[ET.Element]:
+    """Mọi hậu duệ có localname khớp một trong ``local_names`` (bỏ qua namespace)."""
+    return [e for e in elem.iter() if _localname(e.tag) in local_names]
+
+
+def _attr(elem: ET.Element, *names: str, default: str | None = None) -> str | None:
+    """Đọc thuộc tính đầu tiên có mặt trong ``names`` (khớp tên 3.0 vs 2.1, vd
+    ``max-choices`` / ``maxChoices``)."""
+    for n in names:
+        if n in elem.attrib:
+            return elem.attrib[n]
+    return default
 
 
 # Thẻ HTML khối → chèn ký tự xuống dòng khi bóc chữ, để nội dung nhiều đoạn của đề
@@ -180,19 +218,19 @@ def _load_image(abs_path: str) -> dict | None:
 def _parse_item(item_path: str, root_dir: str, order_index: int) -> dict:
     """Convert a single qti-assessment-item XML into our question dict."""
     root = _safe_parse_root(item_path, f"câu hỏi {os.path.basename(item_path)}")
-    if _localname(root.tag) != "qti-assessment-item":
-        raise QtiLoadError(f"File không phải qti-assessment-item: {item_path}")
+    if _localname(root.tag) not in _TAG_ITEM:
+        raise QtiLoadError(f"File không phải assessment-item (QTI 3.0/2.1): {item_path}")
 
-    body = _find(root, "qti-item-body")
+    body = _find(root, *_TAG_ITEM_BODY)
     if body is None:
-        raise QtiLoadError(f"Câu hỏi thiếu qti-item-body: {item_path}")
+        raise QtiLoadError(f"Câu hỏi thiếu item-body: {item_path}")
 
     # Nội dung câu hỏi = mọi khối trong item-body TRƯỚC phần đáp án, GIỮ NGUYÊN THỨ
     # TỰ (chữ ↔ ảnh xen kẽ) — AD-98. Trước đây gom hết chữ rồi dồn ảnh xuống cuối →
     # ảnh (vd hình siêu âm giữa "xét nghiệm" và "câu hỏi") bị rơi sai vị trí.
     raw_blocks: list[dict] = []
     for child in body:
-        if _localname(child.tag) == "qti-choice-interaction":
+        if _localname(child.tag) in _TAG_INTERACTION:
             break
         raw_blocks.extend(_extract_blocks(child, root_dir))
 
@@ -208,18 +246,19 @@ def _parse_item(item_path: str, root_dir: str, order_index: int) -> dict:
             blocks.append(b)
     text = "\n".join(b["text"] for b in blocks if b["type"] == "text").strip()
 
-    interaction = _find(body, "qti-choice-interaction")
+    interaction = _find(body, *_TAG_INTERACTION)
     if interaction is None:
-        raise QtiLoadError(f"Câu hỏi không có qti-choice-interaction: {item_path}")
-    response_id = interaction.attrib.get("response-identifier", "RESPONSE")
-    max_choices = int(interaction.attrib.get("max-choices") or "1")
+        raise QtiLoadError(f"Câu hỏi không có choice-interaction: {item_path}")
+    response_id = _attr(interaction, "response-identifier", "responseIdentifier",
+                        default="RESPONSE")
+    max_choices = int(_attr(interaction, "max-choices", "maxChoices") or "1")
     if max_choices != 1:
         raise QtiLoadError(
             f"Chỉ hỗ trợ câu hỏi 1 đáp án (max-choices=1), file: {item_path}"
         )
     shuffle_options = interaction.attrib.get("shuffle") == "true"
 
-    choices = _findall(interaction, "qti-simple-choice")
+    choices = _findall(interaction, *_TAG_CHOICE)
     if not choices:
         raise QtiLoadError(f"Câu hỏi không có đáp án: {item_path}")
     if len(choices) != 4:
@@ -240,12 +279,15 @@ def _parse_item(item_path: str, root_dir: str, order_index: int) -> dict:
             "fixed": choice.attrib.get("fixed") == "true",
         })
 
-    # Correct answer.
+    # Correct answer. QTI 3.0: qti-response-declaration→qti-correct-response→qti-value.
+    # QTI 2.1:  responseDeclaration→correctResponse→value. Tìm correctResponse trước
+    # rồi lấy value bên trong để không nhầm với defaultValue/value của outcome.
     correct: str | None = None
-    for resp_decl in _findall(root, "qti-response-declaration"):
+    for resp_decl in _findall(root, *_TAG_RESP_DECL):
         if resp_decl.attrib.get("identifier") != response_id:
             continue
-        value_el = _find(resp_decl, "qti-value")
+        cr = _find(resp_decl, *_TAG_CORRECT)
+        value_el = _find(cr, *_TAG_VALUE) if cr is not None else None
         if value_el is not None and value_el.text:
             raw = value_el.text.strip()
             correct = id_to_letter.get(raw, raw if raw in _OPTION_IDS else None)
@@ -272,22 +314,23 @@ def _parse_item(item_path: str, root_dir: str, order_index: int) -> dict:
 
 
 def load_qti_package(root_dir: str) -> dict:
-    """Parse a QTI 3.0 package rooted at ``root_dir`` (a directory containing
-    imsmanifest.xml).  Returns ``{"exam": {...}, "payload": {...}}`` ready to be
-    encrypted+stored via the existing exam_package flow."""
+    """Parse a QTI package (3.0 hoặc 2.1) rooted at ``root_dir`` (a directory
+    containing imsmanifest.xml).  Returns ``{"exam": {...}, "payload": {...}}``
+    ready to be encrypted+stored via the existing exam_package flow."""
     manifest_path = os.path.join(root_dir, "imsmanifest.xml")
     if not os.path.isfile(manifest_path):
         raise QtiLoadError("Không tìm thấy imsmanifest.xml trong gói QTI.")
     manifest = _safe_parse_root(manifest_path, "imsmanifest.xml")
 
-    # Find the test resource.
+    # Find the test resource. Type = ``imsqti_test_xmlv3p0`` (3.0) hoặc
+    # ``imsqti_test_xmlv2p1`` (2.1) → khớp tiền tố chung ``imsqti_test_xml``.
     test_href: str | None = None
     for res in _findall(manifest, "resource"):
-        if (res.attrib.get("type") or "").startswith("imsqti_test_xmlv3"):
+        if (res.attrib.get("type") or "").startswith("imsqti_test_xml"):
             test_href = res.attrib.get("href")
             break
     if not test_href:
-        raise QtiLoadError("Gói QTI không có file qti-assessment-test.")
+        raise QtiLoadError("Gói QTI không có file assessment-test.")
 
     test_path = os.path.join(root_dir, test_href)
     if not os.path.isfile(test_path):
@@ -295,34 +338,42 @@ def load_qti_package(root_dir: str) -> dict:
     test_root = _safe_parse_root(test_path, f"file test {test_href}")
 
     exam_name = test_root.attrib.get("title") or "QTI Exam"
-    # Optional duration via qti-time-limits max-time="<seconds>".
+    # Optional duration via time-limits max-time (3.0) / maxTime (2.1), giây.
     duration_minutes: int | None = None
-    tl = _find(test_root, "qti-time-limits")
+    tl = _find(test_root, *_TAG_TIME_LIMITS)
     if tl is not None:
-        max_time = tl.attrib.get("max-time")
+        max_time = _attr(tl, "max-time", "maxTime")
         if max_time:
             try:
                 duration_minutes = max(1, int(float(max_time) / 60))
             except ValueError:
                 duration_minutes = None
+    # Đảo câu (mặc định TẮT, do nhà cung cấp quyết — AD-34). Bật khi:
+    #  * QTI 3.0/2.1: phần tử ``<qti-ordering shuffle="true">`` / ``<ordering shuffle="true">``
+    #  * QTI 2.1 (biến thể của nhà cung cấp): thuộc tính ``ordering="random"`` trên section.
     shuffle_questions = False
-    ordering = _find(test_root, "qti-ordering")
+    ordering = _find(test_root, *_TAG_ORDERING)
     if ordering is not None:
         shuffle_questions = ordering.attrib.get("shuffle") == "true"
+    if not shuffle_questions:
+        for sec in _findall(test_root, *_TAG_SECTION):
+            if sec.attrib.get("ordering") == "random":
+                shuffle_questions = True
+                break
 
-    # qti-selection picks a random SUBSET of items per assembly. Our model loads
-    # one fixed payload for every candidate, so we cannot honour it — fail loudly
-    # rather than silently delivering all items (which would violate the đề).
-    if _find(test_root, "qti-selection") is not None:
+    # selection (qti-selection 3.0 / selection 2.1) chọn ngẫu nhiên MỘT PHẦN câu
+    # hỏi mỗi lần lắp đề. Model của ta nạp 1 payload cố định cho mọi thí sinh nên
+    # không thể trung thực → báo lỗi rõ thay vì âm thầm giao đủ (sai đề).
+    if _find(test_root, *_TAG_SELECTION) is not None:
         raise QtiLoadError(
-            "Gói QTI dùng qti-selection (chọn ngẫu nhiên một phần câu hỏi) — "
+            "Gói QTI dùng selection (chọn ngẫu nhiên một phần câu hỏi) — "
             "hệ thống chưa hỗ trợ. Vui lòng xuất đề đầy đủ, không dùng selection."
         )
 
     # Ordered item refs.
-    item_refs = _findall(test_root, "qti-assessment-item-ref")
+    item_refs = _findall(test_root, *_TAG_ITEM_REF)
     if not item_refs:
-        raise QtiLoadError("Test không có câu hỏi nào (qti-assessment-item-ref).")
+        raise QtiLoadError("Test không có câu hỏi nào (assessment-item-ref).")
 
     questions: list[dict] = []
     any_shuffle_opts = False
