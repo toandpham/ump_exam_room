@@ -41,3 +41,21 @@ describe("StatusScreen auto-logout (AD-69)", () => {
     expect(logout).toHaveBeenCalled();
   });
 });
+
+describe("StatusScreen tiến độ tải đề (AD-110, T0.4)", () => {
+  it("đang tải → hiện X/Y", () => {
+    render(<StatusScreen variant="ready" download={{ done: 34, total: 37 }} />);
+    expect(screen.getByText(/34\/37/)).toBeTruthy();
+    expect(screen.queryByText(/tải đủ/)).toBeNull();
+  });
+
+  it("tải xong → hiện 'Đề đã tải đủ'", () => {
+    render(<StatusScreen variant="ready" download={{ done: 37, total: 37 }} />);
+    expect(screen.getByText(/tải đủ/)).toBeTruthy();
+  });
+
+  it("không có số liệu download → không hiện khối tiến độ", () => {
+    render(<StatusScreen variant="ready" />);
+    expect(screen.queryByText(/tải đề về máy/)).toBeNull();
+  });
+});
