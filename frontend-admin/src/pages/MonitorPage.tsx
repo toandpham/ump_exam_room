@@ -140,13 +140,13 @@ export default function MonitorPage() {
           anyPaused={anyPaused}
           examOver={examOver}
           readyCount={readyCount}
-          onStart={(skip) => ctrl(
+          onStart={(skip, missing) => ctrl(
             () => start.mutateAsync(),
             (r) => r.started
               ? `▶ Đã bắt đầu thi cho ${r.started} thí sinh.${skip ? " (bỏ qua kiểm tra tải đề)" : " Đồng hồ đang chạy."}`
               : "ℹ️ Chưa có thí sinh nào xác nhận thông tin.",
             skip
-              ? "⚠️ CÒN MÁY CHƯA TẢI XONG ĐỀ.\n\nCác máy đó có thể bị chậm/thiếu hình lúc đầu giờ. Chỉ nên bỏ qua khi máy đó đã hỏng/không dùng.\n\nVẫn BẮT ĐẦU THI ngay?"
+              ? `⚠️ CÒN ${missing} MÁY CHƯA TẢI XONG ĐỀ.\n\nCác máy đó có thể bị chậm/thiếu hình lúc đầu giờ. Chỉ nên bỏ qua khi máy đó đã hỏng/không dùng.\n\nVẫn BẮT ĐẦU THI ngay?`
               : "Bạn có chắc muốn BẮT ĐẦU THI?\n\nMọi máy đã tải đủ đề. Đồng hồ sẽ chạy cho tất cả thí sinh sẵn sàng; mỗi thí sinh có đồng hồ riêng và tự nộp khi hết giờ.",
           )()}
           onPauseAll={ctrl(() => pauseAll.mutateAsync(),

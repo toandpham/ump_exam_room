@@ -3,8 +3,12 @@ FROM node:22-alpine
 WORKDIR /app
 
 # Install deps first for better layer caching.
-COPY package.json ./
-RUN npm install
+# npm ci + package-lock.json: KHOÁ CỨNG phiên bản dependency. Trước đây chỉ COPY
+# package.json + npm install → mỗi lần layer này bị dựng lại là giải lại range "^"
+# từ registry (React/vite/plugin-legacy có thể nhảy phiên bản chưa ai test, thẳng
+# vào bundle thí sinh). Lock đã có sẵn trong repo — dùng nó.
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
 

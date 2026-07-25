@@ -15,7 +15,7 @@ export default function StartExamControls({
   examOver: boolean;
   readyCount: number;
   /** `skipPreloadCheck` = van an toàn: bỏ qua kiểm tra "đã tải đề". */
-  onStart: (skipPreloadCheck: boolean) => void;
+  onStart: (skipPreloadCheck: boolean, missing: number) => void;
   onPauseAll: () => void;
   onResumeAll: () => void;
 }) {
@@ -31,7 +31,7 @@ export default function StartExamControls({
   return (
     <div className="flex gap-2 mb-4 flex-wrap items-center">
       <CtrlBtn
-        onClick={() => onStart(false)}
+        onClick={() => onStart(false, 0)}
         disabled={!canStart || !allLoaded}
         icon={Play} label="Bắt đầu thi" green />
 
@@ -39,7 +39,7 @@ export default function StartExamControls({
           nút này thì 1 máy chết kẹt cả phòng. */}
       {canStart && !allLoaded && (
         <button
-          onClick={() => onStart(true)}
+          onClick={() => onStart(true, missing)}
           className="text-xs text-amber-700 underline underline-offset-2 hover:text-amber-900"
           title="Chỉ dùng khi có máy hỏng không thể tải đề"
         >

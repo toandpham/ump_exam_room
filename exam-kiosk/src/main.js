@@ -248,15 +248,17 @@ async function wipeKiosk() {
  * lặp gần y hệt, sửa một chỗ quên hai chỗ kia là để sót khoá máy sau khi thoát.
  * setTaskMgr(false) ĐỒNG BỘ có chủ đích: phải xong trước app.quit(). */
 function teardown() {
+  // GỠ KHOÁ MÁY TRƯỚC TIÊN: nếu sau này ai thêm bước chưa guard vào giữa hàm này
+  // và nó ném lỗi, máy vẫn không bị kẹt Task Manager / mất nút nguồn.
+  setTaskMgr(false);   // gỡ policy khoá (Task Manager, khoá máy, nút nguồn…)
+  markLockdown(false);
   if (perf) { perf.stop(); perf = null; }
   if (keepOnTopTimer) { clearInterval(keepOnTopTimer); keepOnTopTimer = null; }
   if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
   if (manualRetryTimer) { clearTimeout(manualRetryTimer); manualRetryTimer = null; }
   closeEmergencyWindow();
   stopKeyBlocker();
-  if (stopPolling) stopPolling();
-  setTaskMgr(false);   // gỡ policy khoá (Task Manager, khoá máy, nút nguồn…)
-  markLockdown(false);
+  if (stopPolling) { stopPolling(); stopPolling = null; }
 }
 
 function quitKiosk() {
