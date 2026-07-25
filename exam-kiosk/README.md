@@ -57,8 +57,6 @@ Thứ tự: **IP đã nhớ (lần trước) → IP cấu hình sẵn (`serverIp
    `kiosk.config.json`. Dùng khi switch trường chặn multicast, hoặc muốn cố định.
 3. **Nhập IP tay** — lưới cuối, giám thị gõ IP server rồi kiosk nhớ lại.
 
-(Server vẫn để `SEB_ENFORCE=false`.)
-
 ## Cấu hình (tuỳ chọn)
 Tạo `kiosk.config.json` đặt cạnh file cài để đè mặc định (xem `kiosk.config.example.json`):
 ```json

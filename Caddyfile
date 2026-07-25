@@ -30,8 +30,8 @@
 			transport http {
 				keepalive 30s
 			}
-			# SEB hashes the absolute request URL into X-SafeExamBrowser-ConfigKeyHash;
-			# the backend must rebuild that exact URL, so forward original host/scheme.
+			# Forward original host/scheme so the backend can rebuild the absolute
+			# request URL (used by rate-limit keying + audit).
 			header_up X-Forwarded-Host {host}
 			header_up X-Forwarded-Proto {scheme}
 		}

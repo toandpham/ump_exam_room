@@ -70,7 +70,7 @@ async def get_state(
 async def kiosk_command(db: AsyncSession = Depends(get_db)) -> dict:
     """Polled by Exam Kiosk machines (~5s). Returns {"quit": true} when the chủ
     tịch has triggered 'Thoát tất cả máy thi' for any currently-active exam (AD-66).
-    No auth + no SEB gate on purpose: idle (not-logged-in) machines must poll too.
+    No auth + no kiosk gate on purpose: idle (not-logged-in) machines must poll too.
     In production the at-most-1-active invariant ensures at most one active exam."""
     # Lệnh quit chỉ tới được khi kỳ thi vẫn ACTIVE; nếu đóng kỳ thi trước thì flag Redis đã bị xoá.
     # Danh sách kỳ thi active lấy từ cache Redis (AD-69) — endpoint này MỌI máy poll

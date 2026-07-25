@@ -218,8 +218,8 @@ async def exam_running_status(
     login form when this is true; otherwise a "no exam in progress" screen that
     keeps polling until one opens (AD-61). Gated on the kỳ thi being active — NOT
     on a buổi being open — per the operator: opening the exam is enough to switch
-    candidates to the login screen. SEB-gated: a plain browser gets 403 seb_required
-    here, so opening /thisinh/ outside SEB shows the SEB-required screen (AD-56)."""
+    candidates to the login screen. Kiosk-gated (AD-91): a plain browser gets 403
+    kiosk_required here, so opening /thisinh/ outside the kiosk shows that screen."""
     enforce_exam_client(request)
     # Cache Redis (AD-69): máy chưa đăng nhập poll /status mỗi 5s — tránh query DB mỗi lần.
     exams = await session_service.cached_active_exams(db, redis_client)
@@ -235,9 +235,9 @@ async def exam_running_status(
 async def list_active_exams(
     request: Request, db: AsyncSession = Depends(get_db)
 ) -> list[ActiveExamInfo]:
-    """SEB-gated (AD-55 I3): returns the single section currently open (model is
+    """Kiosk-gated (AD-91): returns the single section currently open (model is
     at-most-one active globally). RegisterScreen displays "you're signing up for
-    X" from this response. A plain browser gets 403 seb_required like /status."""
+    X" from this response. A plain browser gets 403 kiosk_required like /status."""
     enforce_exam_client(request)
     rows = list(await db.scalars(
         select(Exam).where(Exam.status == ExamStatus.ACTIVE.value).order_by(Exam.name)

@@ -10,7 +10,6 @@ import LoginScreen from "./screens/LoginScreen";
 import ConfirmScreen from "./screens/ConfirmScreen";
 import StatusScreen from "./screens/StatusScreen";
 import ExamScreen from "./screens/ExamScreen";
-import SebRequiredScreen from "./screens/SebRequiredScreen";
 import KioskRequiredScreen from "./screens/KioskRequiredScreen";
 import LicenseBlockedScreen from "./screens/LicenseBlockedScreen";
 import NoExamScreen from "./screens/NoExamScreen";
@@ -33,9 +32,7 @@ export default function App() {
 
 /** Before showing the login form, confirm an exam is actually running. No exam
  * running -> NoExamScreen; the poll auto-switches to login when a buổi opens
- * (AD-61). SEB note: enforcement is OFF since AD-64 (máy thi dùng Firefox/kiosk
- * Electron) so the 403 `seb_required` branch below is dormant — kept as an escape
- * hatch in case SEB_ENFORCE is turned back on for Win10/11 machines. */
+ * (AD-61). */
 function LoginGate() {
   const { data: status, isLoading, error } = useQuery({
     queryKey: ["exam-status"],
@@ -50,10 +47,9 @@ function LoginGate() {
       : undefined;
   // AD-91: máy chủ chỉ nhận request từ phần mềm thi (kiosk).
   if (blockedCode === "kiosk_required") return <KioskRequiredScreen />;
-  if (blockedCode === "seb_required") return <SebRequiredScreen />;
 
   // AD-74: giấy phép server hết hạn/thiếu → middleware chặn /status bằng 403
-  // license_* (code ở cấp cao nhất của body, khác shape với seb_required).
+  // license_* (code ở cấp cao nhất của body, khác shape với detail.code).
   const licenseBlocked =
     axios.isAxiosError(error) &&
     error.response?.status === 403 &&
@@ -168,15 +164,12 @@ function ExamShell() {
     (error.response?.data as any)?.detail?.code === "device_superseded";
   if (superseded) return <KickedScreen onRelogin={logout} />;
 
-  // SEB enforcement is OFF since AD-64 (escape hatch kept): if SEB_ENFORCE is
-  // re-enabled, a request from outside Safe Exam Browser returns 403 seb_required.
   const blockedCode =
     axios.isAxiosError(error) && error.response?.status === 403
       ? (error.response?.data as any)?.detail?.code
       : undefined;
   // AD-91: máy chủ chỉ nhận request từ phần mềm thi (kiosk).
   if (blockedCode === "kiosk_required") return <KioskRequiredScreen />;
-  if (blockedCode === "seb_required") return <SebRequiredScreen />;
 
   // AD-74: giấy phép hết hạn giữa chừng — hiện màn tạm ngưng thay vì lỗi mù.
   const licenseBlocked =

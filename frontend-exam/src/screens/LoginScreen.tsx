@@ -7,7 +7,7 @@ import { errorMessage } from "../api/client";
 import { useStore } from "../store";
 import IdentityInput, { type IdType, ID_ERROR, validateId } from "../components/IdentityInput";
 import RegisterScreen from "./RegisterScreen";
-import SebRequiredScreen from "./SebRequiredScreen";
+import KioskRequiredScreen from "./KioskRequiredScreen";
 
 export default function LoginScreen() {
   const login = useStore((s) => s.login);
@@ -16,16 +16,15 @@ export default function LoginScreen() {
   const [cccd, setCccd] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  // SEB enforcement is OFF since AD-64 (máy thi dùng Firefox / kiosk Electron).
-  // This stays as an escape hatch: nếu bật lại SEB_ENFORCE, login trả 403
-  // seb_required → hiện SebRequiredScreen.
-  const [sebBlocked, setSebBlocked] = useState(false);
+  // AD-91: nếu mở bằng trình duyệt thường (không phải kiosk), login trả 403
+  // kiosk_required → hiện màn "phải thi bằng phần mềm thi".
+  const [kioskBlocked, setKioskBlocked] = useState(false);
   const [takeover, setTakeover] = useState(false);
   // Only offer on-the-spot registration if the open exam allows it (AD-33).
   const { data: activeExams } = useQuery({ queryKey: ["active-exams"], queryFn: examApi.activeExams });
   const canRegister = (activeExams ?? []).some((e) => e.allow_registration);
 
-  if (sebBlocked) return <SebRequiredScreen />;
+  if (kioskBlocked) return <KioskRequiredScreen />;
 
   if (mode === "register") {
     return <RegisterScreen onBack={() => setMode("login")} />;
@@ -63,8 +62,8 @@ export default function LoginScreen() {
       if (res.token) login(res.token, res.candidate, res.exam);
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.status === 403 &&
-          (err.response?.data as any)?.detail?.code === "seb_required") {
-        setSebBlocked(true);
+          (err.response?.data as any)?.detail?.code === "kiosk_required") {
+        setKioskBlocked(true);
         return;
       }
       setError(errorMessage(err, "Đăng nhập thất bại. Vui lòng thử lại."));

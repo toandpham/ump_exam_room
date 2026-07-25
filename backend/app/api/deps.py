@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.core import device_lock, kiosk_guard, seb_config
+from app.core import device_lock, kiosk_guard
 from app.core.limiter import client_ip, device_id
 from app.core.redis import redis_client
 from app.core.security import decode_token
@@ -21,15 +21,6 @@ from app.models import Exam
 from app.models.enums import AdminRole, SessionStatus
 
 bearer_scheme = HTTPBearer(auto_error=True)
-
-_seb_required_exc = HTTPException(
-    status_code=status.HTTP_403_FORBIDDEN,
-    detail={
-        "code": "seb_required",
-        "message": "Kỳ thi yêu cầu Safe Exam Browser. Vui lòng mở bằng SEB.",
-    },
-)
-
 
 _kiosk_required_exc = HTTPException(
     status_code=status.HTTP_403_FORBIDDEN,
@@ -42,23 +33,18 @@ _kiosk_required_exc = HTTPException(
 
 
 def enforce_exam_client(request: Request) -> None:
-    """Chặn mọi request thi không đến từ phần mềm được phép (AD-91).
+    """Chặn mọi request thi không đến từ phần mềm thi (Kiosk) — AD-91.
 
-    Hai lớp độc lập, bật/tắt bằng biến môi trường:
-      - ``KIOSK_ONLY`` (mặc định BẬT): chỉ nhận request từ ứng dụng kiosk —
-        trình duyệt thường (Firefox/Chrome/Edge…) bị 403 ``kiosk_required``.
-      - ``SEB_ENFORCE`` (mặc định TẮT từ AD-64): chỉ nhận request từ Safe Exam
-        Browser. Giữ lại làm lối thoát nếu sau này quay về SEB.
+    ``KIOSK_ONLY`` (mặc định BẬT): trình duyệt thường (Firefox/Chrome/Edge…) bị
+    403 ``kiosk_required``. Van xả khi cần thi tạm bằng trình duyệt: đặt
+    ``KIOSK_ONLY=false`` trong ``.env`` rồi ``docker compose up -d backend``.
 
-    Van xả khi cần cho thi tạm bằng trình duyệt: đặt ``KIOSK_ONLY=false`` trong
-    ``.env`` rồi ``docker compose up -d backend``.
+    (Lớp SEB cũ đã gỡ hẳn — refactor đợt 3; SEB bị bỏ từ AD-64, KIOSK_ONLY là
+    cơ chế cưỡng chế phần mềm thi duy nhất. Muốn quay lại SEB: khôi phục
+    core/seb_config.py + nhánh này từ git trước commit refactor.)
     """
     if settings.kiosk_only and not kiosk_guard.is_kiosk_request(request):
         raise _kiosk_required_exc
-    if not settings.seb_enforce:
-        return
-    if not seb_config.verify_seb_header(request, seb_config.current_config_key()):
-        raise _seb_required_exc
 
 _credentials_exc = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,

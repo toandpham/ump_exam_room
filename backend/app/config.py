@@ -35,16 +35,10 @@ class Settings(BaseSettings):
     upload_dir: str = "/app/uploads"
     max_upload_mb: int = 20
 
-    # Safe Exam Browser — MẶC ĐỊNH TẮT (hệ thống dùng kiosk riêng, không dùng SEB).
-    # Chỉ bật (SEB_ENFORCE=true trong .env) nếu thật sự dùng Safe Exam Browser.
-    seb_start_url: str = "http://exam-server.local/thisinh/"
-    seb_enforce: bool = False
     # AD-91 — CHỈ cho thi bằng phần mềm kiosk; trình duyệt thường bị 403.
     # Tắt tạm (cho thi bằng trình duyệt): KIOSK_ONLY=false + docker compose up -d backend.
+    # (Lớp Safe Exam Browser đã gỡ hẳn — refactor đợt 3; bỏ từ AD-64.)
     kiosk_only: bool = True
-    # Config Key from the SEB Config Tool (preferred — version-proof). When set,
-    # it overrides the value computed from our settings template (see AD-57).
-    seb_config_key: str = ""
 
 
     # Rate limiting — throttle password brute-force on the admin login.

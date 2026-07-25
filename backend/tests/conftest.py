@@ -30,11 +30,10 @@ from app.services import session_service
 # trip and cause spurious 429s. Disable it for the suite.
 limiter.enabled = False
 
-# SEB is mandatory in production but the test suite (and dev without SEB) can't
-# send a real Config Key header — disable enforcement here (AD-56).
+# Cưỡng chế phần mềm thi: client test không phải kiosk → tắt cho toàn suite
+# (test_kiosk_only.py tự bật lại quanh từng ca để kiểm gate). SEB đã gỡ (refactor đợt 3).
 from app.config import settings as _settings  # noqa: E402
-_settings.seb_enforce = False
-_settings.kiosk_only = False   # client test không phải kiosk
+_settings.kiosk_only = False
 
 # Giấy phép server (AD-74): suite không có key thật (khoá bí mật nằm ngoài repo)
 # — autouse coi như hợp lệ để 141 test cũ chạy nguyên. test_license.py giữ tham
