@@ -28,8 +28,9 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
           submitError, clearSubmitError } =
     useExamSession(sessionId, data, handleSubmitted, ws);
 
-  // AD-90: nạp trước ảnh của vài câu KẾ TIẾP (thay vì cả đề một lúc lúc phát đề —
-  // máy Win7/4GB không chịu nổi). Chạy sau khi câu hiện tại đã hiển thị.
+  // AD-90/AD-110: CHEN HÀNG vài câu KẾ TIẾP lên trước hàng đợi nền. Toàn bộ đề đã
+  // được tải lúc CHỜ bắt đầu (usePreloadDeck) nên đây chỉ là lưới an toàn cho máy
+  // vào trễ / rớt mạng lúc chờ — sổ `seen` chống tải trùng.
   useEffect(() => {
     if (!data) return;
     preloadImages(imageUrlsOf(data.questions.slice(current + 1, current + 1 + PRELOAD_AHEAD)));

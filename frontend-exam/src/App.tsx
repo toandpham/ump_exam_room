@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import axios from "axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MonitorX } from "lucide-react";
 import { examApi } from "./api/exam";
-import { imageUrlsOf, preloadAllFast, preloadAllPaced } from "./lib/preload";
 import { useStore } from "./store";
 import { useExamSocket, type WsEvent } from "./hooks/useExamSocket";
+import { usePreloadDeck } from "./hooks/usePreloadDeck";
+import { useBlockedScreen } from "./hooks/useBlockedScreen";
 import LoginScreen from "./screens/LoginScreen";
 import ConfirmScreen from "./screens/ConfirmScreen";
 import StatusScreen from "./screens/StatusScreen";
@@ -41,20 +41,9 @@ function LoginGate() {
     retry: false,
   });
 
-  const blockedCode =
-    axios.isAxiosError(error) && error.response?.status === 403
-      ? (error.response?.data as any)?.detail?.code
-      : undefined;
-  // AD-91: máy chủ chỉ nhận request từ phần mềm thi (kiosk).
-  if (blockedCode === "kiosk_required") return <KioskRequiredScreen />;
-
-  // AD-74: giấy phép server hết hạn/thiếu → middleware chặn /status bằng 403
-  // license_* (code ở cấp cao nhất của body, khác shape với detail.code).
-  const licenseBlocked =
-    axios.isAxiosError(error) &&
-    error.response?.status === 403 &&
-    String((error.response?.data as any)?.code ?? "").startsWith("license_");
-  if (licenseBlocked) return <LicenseBlockedScreen />;
+  const blocked = useBlockedScreen(error);
+  if (blocked === "kiosk") return <KioskRequiredScreen />;      // AD-91
+  if (blocked === "license") return <LicenseBlockedScreen />;   // AD-74
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center text-slate-500">Đang tải…</div>;
@@ -107,41 +96,10 @@ function ExamShell() {
     staleTime: Infinity,
     retry: false,
   });
-  // (AD-110b: luồng "nạp ảnh 12 câu đầu" lúc ready ĐÃ BỎ — preloadAllFast dưới đây
-  // phủ toàn bộ ngay từ giây đầu theo đúng thứ tự câu; 2 luồng chạy song song từng
-  // đua nhau nẫng ảnh làm tiến độ kẹt 34/37 → nút Bắt đầu thi không mở khoá.)
-
-  // AD-110: lúc CHỜ bắt đầu (ready — đã phát đề, đồng hồ chưa chạy) → tải NHANH
-  // toàn bộ ảnh đề về cache đĩa + báo tiến độ lên màn chờ. Dồn hết việc tải vào
-  // giai đoạn máy rảnh để vào thi không còn tải nền làm ì máy yếu ("khúc đầu
-  // chậm"). RAM vẫn nhẹ: chỉ tải bytes xuống đĩa, không giữ ảnh giải nén.
-  const [dl, setDl] = useState<{ done: number; total: number } | null>(null);
-  const preloadReportedFor = useRef<string | null>(null);   // phiên đã báo "tải xong"
-  useEffect(() => {
-    if (state?.status !== "ready" || !prefetch.data) return;
-    const sid = state.session_id;
-    return preloadAllFast(imageUrlsOf(prefetch.data.questions), (done, total) => {
-      setDl({ done, total });
-      // Tải đủ (kể cả đề không ảnh: 0/0) → báo server 1 lần cho phiên này; bảng
-      // giám sát đếm để chủ tịch biết khi nào mọi máy sẵn đề (gate Bắt đầu thi).
-      if (done >= total && sid && preloadReportedFor.current !== sid) {
-        preloadReportedFor.current = sid;
-        examApi.preloadDone().catch(() => {
-          preloadReportedFor.current = null;   // lỗi mạng → thử lại ở tick tải kế / poll sau
-          setTimeout(() => { void examApi.preloadDone().then(
-            () => { preloadReportedFor.current = sid; }).catch(() => {}); }, 5000);
-        });
-      }
-    });
-  }, [state?.status, state?.session_id, prefetch.data]);
-
-  // AD-90c: ĐANG THI thì chỉ còn luồng rải chậm (~1 ảnh/giây) vét phần sót — máy
-  // vào trễ / mất mạng lúc chờ. Hàng đợi bỏ qua ảnh đã tải (sổ `seen`) nên máy đã
-  // tải đủ lúc chờ sẽ không đụng mạng nữa.
-  useEffect(() => {
-    if (state?.status !== "in_progress" || !prefetch.data) return;
-    return preloadAllPaced(imageUrlsOf(prefetch.data.questions));
-  }, [state?.status, prefetch.data]);
+  // AD-110/AD-110b: nạp trước ảnh đề + báo server khi tải đủ (gate "Bắt đầu thi").
+  // Chi tiết semantics nằm trong hook — tách ở refactor đợt 3 để App.tsx còn là
+  // bộ định tuyến màn hình.
+  const { download } = usePreloadDeck(state?.status, state?.session_id, prefetch.data);
 
   // ONE socket per candidate (AD-14): ExamShell owns it. Every control event
   // refreshes state (instant distribute/start/end transitions) and is forwarded
@@ -157,26 +115,10 @@ function ExamShell() {
     return () => { handlersRef.current.delete(h); };
   }, []);
 
-  // Kicked out because the same CCCD logged in on another device.
-  const superseded =
-    axios.isAxiosError(error) &&
-    error.response?.status === 409 &&
-    (error.response?.data as any)?.detail?.code === "device_superseded";
-  if (superseded) return <KickedScreen onRelogin={logout} />;
-
-  const blockedCode =
-    axios.isAxiosError(error) && error.response?.status === 403
-      ? (error.response?.data as any)?.detail?.code
-      : undefined;
-  // AD-91: máy chủ chỉ nhận request từ phần mềm thi (kiosk).
-  if (blockedCode === "kiosk_required") return <KioskRequiredScreen />;
-
-  // AD-74: giấy phép hết hạn giữa chừng — hiện màn tạm ngưng thay vì lỗi mù.
-  const licenseBlocked =
-    axios.isAxiosError(error) &&
-    error.response?.status === 403 &&
-    String((error.response?.data as any)?.code ?? "").startsWith("license_");
-  if (licenseBlocked) return <LicenseBlockedScreen />;
+  const blocked = useBlockedScreen(error);
+  if (blocked === "kicked") return <KickedScreen onRelogin={logout} />;   // AD-26
+  if (blocked === "kiosk") return <KioskRequiredScreen />;                // AD-91
+  if (blocked === "license") return <LicenseBlockedScreen />;             // AD-74
 
   if (isLoading || !state) {
     return <div className="min-h-screen flex items-center justify-center text-slate-500">Đang tải…</div>;
@@ -191,7 +133,7 @@ function ExamShell() {
     case "waiting":
       return <StatusScreen variant="waiting" />;
     case "ready":
-      return <StatusScreen variant="ready" download={dl} />;
+      return <StatusScreen variant="ready" download={download} />;
     case "in_progress":
       // SP-2c: nếu chưa tới mốc bắt đầu chung → đếm ngược đồng bộ (đề đã prefetch,
       // mở tức thì khi tới giờ). CountdownScreen tự gọi onStart ngay nếu đã qua giờ.
