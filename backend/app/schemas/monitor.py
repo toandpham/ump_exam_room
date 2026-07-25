@@ -8,10 +8,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class DistributeResult(BaseModel):
-    updated: int
-
-
 class ExtendRequest(BaseModel):
     minutes: int = Field(ge=1, le=180)
 

@@ -16,7 +16,7 @@ from app.core.redis import redis_client
 from app.database import get_db
 from app.models import Admin, ExamSession, Sitting
 from app.models.enums import EventType, ExamStatus, SessionStatus, SittingStatus
-from app.schemas.monitor import DistributeResult, EndResult, ExtendRequest, StartResult
+from app.schemas.monitor import EndResult, ExtendRequest, StartResult
 from app.services import exam_assets, session_service
 from app.websocket.manager import manager
 
@@ -31,27 +31,9 @@ START_LEAD_SECONDS = 30
 
 
 # --- sitting run-control ----------------------------------------------------
-
-@router.post("/sittings/{sitting_id}/distribute", response_model=DistributeResult)
-async def distribute(
-    sitting_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    admin: Admin = Depends(_require_proctor),
-) -> DistributeResult:
-    """Phát đề: move all waiting sessions of the sitting to ready."""
-    sitting = await sitting_for_admin(db, sitting_id, admin)
-    await _require_open_sitting(db, sitting)
-    result = await db.execute(
-        update(ExamSession)
-        .where(ExamSession.sitting_id == sitting_id, ExamSession.status == SessionStatus.WAITING.value)
-        .values(status=SessionStatus.READY.value)
-    )
-    db.add(session_service.make_event(event_type=EventType.DISTRIBUTE.value,
-                                      metadata={"sitting_id": str(sitting_id)}))
-    await db.commit()
-    await manager.publish("exam", "exam_distributed", exam_id=sitting.exam_id)
-    return DistributeResult(updated=result.rowcount or 0)
-
+# (Bước "Phát đề" (distribute) thủ công đã gỡ — refactor đợt 3. Từ SP-2b, xác nhận
+# thông tin → phiên tự sang READY, không cần chủ tịch phát đề riêng; FE không còn
+# gọi, không ai nghe WS exam_distributed.)
 
 @router.post("/sittings/{sitting_id}/start", response_model=StartResult)
 async def start(

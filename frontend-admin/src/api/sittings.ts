@@ -55,7 +55,6 @@ export const sittingsApi = {
     (await api.post(`/admin/sittings/${id}/open`)).data,
 
   // Run-control for a chosen buổi.
-  distribute: async (id: string) => (await api.post(`/admin/sittings/${id}/distribute`)).data,
   start: async (id: string) => (await api.post(`/admin/sittings/${id}/start`)).data,
   pauseAll: async (id: string) => (await api.post(`/admin/sittings/${id}/pause-all`)).data,
   resumeAll: async (id: string) => (await api.post(`/admin/sittings/${id}/resume-all`)).data,
