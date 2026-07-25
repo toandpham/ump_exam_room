@@ -25,7 +25,7 @@ vi.mock("../api/monitor", () => ({
 const ROSTER = {
   earliest_end_time: null, server_time: new Date().toISOString(),
   assigned_total: 2, logged_in: 2, not_logged_in_total: 0, not_logged_in: [],
-  self_registered_total: 0, running_count: 0, question_count: 10,
+  question_count: 10,
 };
 
 function sess(over: Partial<SessionSummary>): SessionSummary {

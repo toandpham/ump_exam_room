@@ -37,12 +37,10 @@ export interface RosterResponse {
   assigned_total: number;
   logged_in: number;
   not_logged_in_total: number;
-  self_registered_total: number;
   not_logged_in: RosterCandidate[];
   // Đồng hồ thi chung (AD-78): deadline sớm nhất trong các phiên đang làm + giờ server.
   earliest_end_time: string | null;
   server_time: string | null;
-  running_count: number;
 }
 
 /** Session-level controls (chủ tịch on any owned exam; giám thị on their room). */

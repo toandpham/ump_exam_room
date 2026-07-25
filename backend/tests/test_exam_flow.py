@@ -123,7 +123,9 @@ async def test_self_registered_counted_in_roster(client, factory):
     assert r.status_code == 201, r.text
 
     roster = (await client.get(f"/api/admin/sittings/{sitting.id}/roster", headers=auth(proc))).json()
-    assert roster["self_registered_total"] >= 1
+    # Cờ self_registered trên TỪNG thí sinh vẫn còn (phân biệt người tự đăng ký).
+    # Tổng self_registered_total đã gỡ ở refactor đợt 3 — UI bỏ box "Đăng ký mới"
+    # từ AD-80 nên đó là query thừa mỗi lần poll roster.
     assert any(c["self_registered"] for c in roster["not_logged_in"])
 
     # Clean up the self-registered candidate (factory teardown only knows its own).

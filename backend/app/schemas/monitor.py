@@ -77,13 +77,11 @@ class RosterResponse(BaseModel):
     assigned_total: int
     logged_in: int
     not_logged_in_total: int
-    self_registered_total: int = 0
     not_logged_in: list[RosterCandidate]
-    # Earliest end_time among running candidates (informational — timers are
-    # per-candidate now, so there's no single cohort deadline). running_count =
-    # in_progress now; server_time anchors any countdown against the server clock.
+    # Earliest end_time among running candidates (đồng hồ per-candidate nên không
+    # có deadline chung — dùng làm mốc đếm ngược ở màn giám sát, AD-78).
+    # server_time để máy admin bù lệch đồng hồ khi đếm ngược.
     earliest_end_time: datetime | None = None
-    running_count: int = 0
     server_time: datetime | None = None
 
 

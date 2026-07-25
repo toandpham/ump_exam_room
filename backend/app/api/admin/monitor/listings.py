@@ -154,11 +154,6 @@ async def sitting_roster(
     logged_in = await db.scalar(
         select(func.count(ExamSession.id)).where(ExamSession.sitting_id == sitting_id)
     ) or 0
-    self_registered_total = await db.scalar(
-        select(func.count(Candidate.id)).where(
-            Candidate.exam_id == sitting.exam_id, Candidate.self_registered.is_(True))
-    ) or 0
-
     session_cand_ids = select(ExamSession.candidate_id).where(ExamSession.sitting_id == sitting_id)
     pending = (await db.execute(
         select(Candidate, Room.name)
@@ -167,12 +162,6 @@ async def sitting_roster(
         .order_by(Candidate.full_name)
     )).all()
 
-    running_count = await db.scalar(
-        select(func.count(ExamSession.id)).where(
-            ExamSession.sitting_id == sitting_id,
-            ExamSession.status == SessionStatus.IN_PROGRESS.value,
-        )
-    ) or 0
     earliest_end_time = await db.scalar(
         select(func.min(ExamSession.end_time)).where(
             ExamSession.sitting_id == sitting_id,
@@ -192,9 +181,7 @@ async def sitting_roster(
         assigned_total=assigned_total,
         logged_in=logged_in,
         not_logged_in_total=len(pending),
-        self_registered_total=self_registered_total,
         earliest_end_time=earliest_end_time,
-        running_count=int(running_count),
         server_time=datetime.now(timezone.utc),
         not_logged_in=[
             RosterCandidate(
