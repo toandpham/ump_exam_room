@@ -41,8 +41,8 @@ class Settings(BaseSettings):
     kiosk_only: bool = True
 
 
-    # Rate limiting — throttle password brute-force on the admin login.
-    admin_login_rate: str = "10/2minutes"
+    # Rate limiting cho login thí sinh (login admin dùng core/login_guard khoá
+    # tăng dần theo IP, AD-46 — không dùng slowapi nên không có admin_login_rate).
     exam_login_rate: str = "10/2minutes"
 
     # CORS

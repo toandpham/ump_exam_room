@@ -32,9 +32,9 @@ MAX_IMAGE_WIDTH = 1280
 JPEG_QUALITY = 85
 
 # AD-107: bản NHỎ hiển thị trong bài. Khung câu hỏi chỉ rộng ~720px nhưng máy con
-# phải GIẢI NÉN nguyên tấm 1600px (~7-8MB RAM/tấm) → máy 4GB nghẹt mỗi lần chuyển
-# câu nhiều ảnh (hiện trường: "để yên 20-30s mới nhanh lại"). Sinh thêm bản ≤720px
-# cho hiển thị; bản 1600px CHỈ tải khi bấm phóng to (zoom vẫn nét).
+# phải GIẢI NÉN nguyên bản đầy đủ (MAX_IMAGE_WIDTH px, ~vài MB RAM/tấm) → máy 4GB
+# nghẹt mỗi lần chuyển câu nhiều ảnh (hiện trường: "để yên 20-30s mới nhanh lại").
+# Sinh thêm bản ≤720px cho hiển thị; bản đầy đủ CHỈ tải khi bấm phóng to (zoom nét).
 THUMB_WIDTH = 720
 THUMB_QUALITY = 82
 

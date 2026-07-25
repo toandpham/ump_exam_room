@@ -55,7 +55,8 @@ class Sitting(Base, TimestampMixin):
         String(20), nullable=False, default=SittingStatus.DRAFT.value,
         server_default=SittingStatus.DRAFT.value, index=True,
     )
-    # Encrypted .exam payload kept at rest; plaintext lives only in Redis when active.
+    # Payload đề mã hoá at-rest (AES-256-GCM, xem exam_package); bản giải mã chỉ
+    # nằm trong Redis khi buổi đang mở.
     # deferred: blob đề có thể >100MB — KHÔNG được kéo theo mọi query thường
     # (login/state/list buổi). Chỗ nào cần blob thật thì dùng
     # session_service.sitting_payload_blob / sitting_has_payload (SELECT tường minh).

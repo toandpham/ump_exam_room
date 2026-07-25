@@ -11,7 +11,6 @@ from app.api.exam.auth import _session_state
 from app.core.redis import redis_client
 from app.database import get_db
 from app.models import Candidate, Exam, ExamSession
-from app.models.enums import ExamStatus
 from app.schemas.exam_session import CandidateInfo, CandidateLoginResponse, ExamInfo, SessionStateOut
 from app.services import session_service
 

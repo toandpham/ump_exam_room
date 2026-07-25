@@ -1,7 +1,7 @@
 """Exam (kỳ thi) CRUD. The exam is a container; đề lives on its sittings (AD-47).
 
-QTI import + run-control moved to the sittings / monitor routers. There is no
-manual authoring, .exam exchange, or USB scanning (AD-23/AD-27).
+QTI import + run-control moved to the sittings / monitor routers. Đề chỉ nhận
+qua QTI (.qenc) — không có soạn thủ công (AD-47).
 """
 
 import uuid

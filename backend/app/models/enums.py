@@ -61,7 +61,6 @@ class EventType(str, Enum):
     TAB_CHANGE = "tab_change"
     SUBMIT = "submit"
     EMERGENCY_ADD = "emergency_add"
-    RESET = "reset"
     PROCTOR_LOGOUT = "proctor_logout"       # giám thị/chủ tịch đăng xuất 1 thí sinh (AD-55 M4)
     EXAM_END = "exam_end"
     EXAM_PURGED = "exam_purged"             # encrypted_payload + Redis wiped after end
