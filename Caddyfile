@@ -74,6 +74,15 @@
 
 		# Admin SPA (Vite base /admin/) and candidate SPA (Vite base /thisinh/).
 		reverse_proxy /admin* frontend-admin:5173
+		# App thí sinh là BẢN BUILD: tên file trong /thisinh/assets/ có hash nội dung
+		# (index-<hash>.js) → đổi nội dung là đổi tên → cache vĩnh viễn an toàn. Giúp
+		# 400 máy khởi động lại không tải lại bundle. KHÔNG áp cho index.html (phải
+		# luôn lấy mới, nếu không máy sẽ trỏ tới file hash cũ sau khi cập nhật).
+		# PHẢI dùng header_down (THAY THẾ header của upstream) — `header` thường chỉ
+		# THÊM, để lại `no-cache` của vite preview và trình duyệt sẽ nghe no-cache.
+		reverse_proxy /thisinh/assets/* frontend-exam:5173 {
+			header_down Cache-Control "public, max-age=31536000, immutable"
+		}
 		reverse_proxy /thisinh* frontend-exam:5173
 
 		# Landing: send root to the admin app.

@@ -55,16 +55,8 @@ PYEOF
 fi
 
 # ── 2. Kéo code mới (chạy git theo CHỦ SỞ HỮU repo — đúng khoá SSH + đúng quyền file) ──
-OWNER=$(ls -ld .git | awk '{print $3}')
-ME=$(id -un)
-run_git() {
-  if [ "$ME" != "$OWNER" ] && command -v sudo >/dev/null 2>&1; then
-    sudo -u "$OWNER" git "$@"
-  else
-    git "$@"
-  fi
-}
-git config --global --add safe.directory "$PWD" >/dev/null 2>&1 || true
+# shellcheck source=scripts/lib/git.sh
+. "$(dirname "$0")/scripts/lib/git.sh" "$PWD"
 
 BRANCH=$(run_git rev-parse --abbrev-ref HEAD)
 BEFORE=$(run_git rev-parse HEAD)
@@ -83,6 +75,14 @@ info "Có bản mới. Các thay đổi sẽ áp dụng:"
 run_git log --oneline "$BEFORE..$AFTER" | sed 's/^/    /'
 
 # ── 3. Build lại + khởi động lại (áp bản vá) ─────────────────────────────────
+# App THÍ SINH phục vụ bản dist NẰM TRONG IMAGE (không bind-mount như admin), nên
+# nếu Docker coi layer COPY là cache-hit thì image KHÔNG được dựng lại → máy thi
+# vẫn chạy bundle CŨ dù đã pull code mới (sự cố 24-07: sửa xong mà không thấy đổi).
+# Build riêng nó với --no-cache là cách chắc chắn duy nhất; tốn thêm ~1-2 phút mỗi
+# lần cập nhật — đáng, vì chạy nhầm bundle cũ giữa buổi thi là không phát hiện được.
+info "Dựng lại app thí sinh (bỏ cache để chắc chắn lấy bản mới)…"
+docker compose build --no-cache frontend-exam
+
 info "Build lại image + khởi động lại các dịch vụ…"
 docker compose up -d --build
 # Caddyfile là bind-mount: đổi nội dung KHÔNG làm compose tạo lại container, mà

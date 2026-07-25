@@ -28,16 +28,8 @@ FETCH_EVERY=600   # giây — nhịp git fetch kiểm bản mới
 LOOP_EVERY=15     # giây — nhịp kiểm flag
 last_fetch=0
 
-OWNER=$(ls -ld .git 2>/dev/null | awk '{print $3}')
-ME=$(id -un)
-run_git() {
-  if [ -n "$OWNER" ] && [ "$ME" != "$OWNER" ] && command -v sudo >/dev/null 2>&1; then
-    sudo -u "$OWNER" git "$@"
-  else
-    git "$@"
-  fi
-}
-git config --global --add safe.directory "$REPO" >/dev/null 2>&1 || true
+# shellcheck source=lib/git.sh
+. "$REPO/scripts/lib/git.sh" "$REPO"
 
 # Ghi state JSON an toàn (python3 lo escape) — trang Quản trị đọc file này.
 # $1=state  $2=message  (local/remote/update_available lấy từ biến toàn cục)
