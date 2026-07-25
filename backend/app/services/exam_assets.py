@@ -55,56 +55,43 @@ def _sitting_dir(sitting_id: uuid.UUID) -> Path:
     return Path(settings.upload_dir) / f"sitting_{sitting_id.hex}"
 
 
-def shrink_image(data: bytes, mime: str | None) -> tuple[bytes, str | None]:
-    """Thu nhỏ ảnh quá khổ về ``MAX_IMAGE_WIDTH`` (AD-90). Trả (bytes, mime) —
-    ảnh đã đủ nhỏ, định dạng lạ hoặc lỗi giải mã thì trả NGUYÊN BẢN (không bao
-    giờ làm hỏng đề vì một tấm ảnh)."""
+def _resize_to_width(data: bytes, target_width: int, quality: int) -> bytes | None:
+    """Thu nhỏ ảnh về ``target_width`` px (giữ tỉ lệ). Trả None khi ảnh đã đủ nhỏ /
+    định dạng lạ / lỗi giải mã (caller quyết dùng bản gốc) — không bao giờ làm hỏng
+    đề vì một tấm ảnh. Lõi chung cho shrink_image (bản đầy đủ) + _thumb_bytes (thumb)."""
     try:
         with Image.open(io.BytesIO(data)) as im:
-            if im.width <= MAX_IMAGE_WIDTH:
-                return data, mime
-            fmt = (im.format or "").upper()
-            if fmt not in {"JPEG", "PNG", "WEBP"}:
-                return data, mime
-            height = max(1, round(im.height * MAX_IMAGE_WIDTH / im.width))
-            resized = im.convert("RGB") if fmt == "JPEG" else im.copy()
-            resized = resized.resize((MAX_IMAGE_WIDTH, height), Image.LANCZOS)
-            buf = io.BytesIO()
-            if fmt == "JPEG":
-                resized.save(buf, "JPEG", quality=JPEG_QUALITY, optimize=True)
-            else:
-                resized.save(buf, fmt)
-            out = buf.getvalue()
-            # Có trường hợp file nén lại còn to hơn (PNG ảnh chụp) → giữ bản gốc.
-            return (out, mime) if len(out) < len(data) else (data, mime)
-    except Exception as exc:  # noqa: BLE001 — ảnh lạ/hỏng: dùng nguyên bản
-        logger.warning("shrink_image bỏ qua một ảnh: %s", exc)
-        return data, mime
-
-
-def _thumb_bytes(data: bytes) -> bytes | None:
-    """Bản nhỏ ≤``THUMB_WIDTH`` để hiển thị trong bài (AD-107). Mục tiêu là giảm
-    SỐ PIXEL máy con phải giải nén (RAM), không chỉ số byte. Trả None khi ảnh đã
-    đủ nhỏ / định dạng lạ / lỗi — caller dùng luôn bản đầy đủ."""
-    try:
-        with Image.open(io.BytesIO(data)) as im:
-            if im.width <= THUMB_WIDTH:
+            if im.width <= target_width:
                 return None
             fmt = (im.format or "").upper()
             if fmt not in {"JPEG", "PNG", "WEBP"}:
                 return None
-            height = max(1, round(im.height * THUMB_WIDTH / im.width))
+            height = max(1, round(im.height * target_width / im.width))
             resized = im.convert("RGB") if fmt == "JPEG" else im.copy()
-            resized = resized.resize((THUMB_WIDTH, height), Image.LANCZOS)
+            resized = resized.resize((target_width, height), Image.LANCZOS)
             buf = io.BytesIO()
             if fmt == "JPEG":
-                resized.save(buf, "JPEG", quality=THUMB_QUALITY, optimize=True)
+                resized.save(buf, "JPEG", quality=quality, optimize=True)
             else:
                 resized.save(buf, fmt)
             return buf.getvalue()
-    except Exception as exc:  # noqa: BLE001 — ảnh lạ/hỏng: dùng bản đầy đủ
-        logger.warning("thumb bỏ qua một ảnh: %s", exc)
+    except Exception as exc:  # noqa: BLE001 — ảnh lạ/hỏng
+        logger.warning("resize bỏ qua một ảnh: %s", exc)
         return None
+
+
+def shrink_image(data: bytes, mime: str | None) -> tuple[bytes, str | None]:
+    """Thu nhỏ ảnh quá khổ về ``MAX_IMAGE_WIDTH`` (AD-90). Trả (bytes, mime) —
+    ảnh đã đủ nhỏ / định dạng lạ / lỗi / nén lại còn to hơn thì trả NGUYÊN BẢN."""
+    out = _resize_to_width(data, MAX_IMAGE_WIDTH, JPEG_QUALITY)
+    # Có trường hợp file nén lại còn to hơn (PNG ảnh chụp) → giữ bản gốc.
+    return (out, mime) if out is not None and len(out) < len(data) else (data, mime)
+
+
+def _thumb_bytes(data: bytes) -> bytes | None:
+    """Bản nhỏ ≤``THUMB_WIDTH`` để hiển thị trong bài (AD-107). Giảm SỐ PIXEL máy
+    con phải giải nén (RAM). None → caller dùng luôn bản đầy đủ."""
+    return _resize_to_width(data, THUMB_WIDTH, THUMB_QUALITY)
 
 
 def materialize_payload_images(sitting_id: uuid.UUID, payload: dict) -> dict:
