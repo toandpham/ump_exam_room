@@ -149,18 +149,10 @@ async def sitting_roster(
     assigned_total = await db.scalar(
         select(func.count(Candidate.id)).where(Candidate.exam_id == sitting.exam_id)
     ) or 0
-    # Vắng (absent) không tính là đã đăng nhập (AD-68).
-    absent_total = await db.scalar(
-        select(func.count(ExamSession.id)).where(
-            ExamSession.sitting_id == sitting_id,
-            ExamSession.status == SessionStatus.ABSENT.value,
-        )
-    ) or 0
+    # Đã đăng nhập = có phiên trong buổi này. (Tick Vắng đã gỡ — refactor đợt 3;
+    # thí sinh không có phiên vẫn tính là vắng ở BÁO CÁO, không cần trạng thái riêng.)
     logged_in = await db.scalar(
-        select(func.count(ExamSession.id)).where(
-            ExamSession.sitting_id == sitting_id,
-            ExamSession.status != SessionStatus.ABSENT.value,
-        )
+        select(func.count(ExamSession.id)).where(ExamSession.sitting_id == sitting_id)
     ) or 0
     self_registered_total = await db.scalar(
         select(func.count(Candidate.id)).where(
@@ -199,7 +191,6 @@ async def sitting_roster(
         ),
         assigned_total=assigned_total,
         logged_in=logged_in,
-        absent_total=absent_total,
         not_logged_in_total=len(pending),
         self_registered_total=self_registered_total,
         earliest_end_time=earliest_end_time,

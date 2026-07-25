@@ -8,10 +8,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class AbsentRequest(BaseModel):
-    absent: bool
-
-
 class DistributeResult(BaseModel):
     updated: int
 
@@ -84,7 +80,6 @@ class RosterResponse(BaseModel):
     sitting: RosterSitting
     assigned_total: int
     logged_in: int
-    absent_total: int = 0
     not_logged_in_total: int
     self_registered_total: int = 0
     not_logged_in: list[RosterCandidate]

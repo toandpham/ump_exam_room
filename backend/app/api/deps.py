@@ -120,32 +120,6 @@ async def room_ids_for_proctor(db: AsyncSession, exam_id, admin: Admin) -> list[
     ))
 
 
-async def candidate_in_sitting_for_admin(
-    db: AsyncSession,
-    sitting_id: uuid.UUID,
-    candidate_id: uuid.UUID,
-    admin: Admin,
-) -> tuple:
-    """(Sitting, Candidate) cho thao tác trên 1 thí sinh trong 1 buổi.
-
-    Chủ tịch: sở hữu kỳ thi (AD-30).
-    Giám thị: thí sinh phải thuộc phòng của mình.
-    404 nếu sai quyền (ẩn sự tồn tại như các helper khác)."""
-    sitting = await db.get(Sitting, sitting_id)
-    if sitting is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Không tìm thấy buổi thi")
-    cand = await db.get(Candidate, candidate_id)
-    if cand is None or cand.exam_id != sitting.exam_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Không tìm thấy thí sinh")
-    if admin.role == AdminRole.ROOM_PROCTOR.value:
-        room_ids = await room_ids_for_proctor(db, sitting.exam_id, admin)
-        if cand.room_id not in room_ids:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Thí sinh không thuộc phòng của bạn")
-    else:
-        await exam_for_admin(db, sitting.exam_id, admin)  # kiểm tra sở hữu cho chủ tịch
-    return sitting, cand
-
-
 async def session_for_pause(db: AsyncSession, session_id: uuid.UUID, admin: Admin) -> ExamSession:
     """Resolve a session a proctor/giám thị may pause or resume (AD-47).
 

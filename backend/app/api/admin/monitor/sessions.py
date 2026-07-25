@@ -13,7 +13,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
-    candidate_in_sitting_for_admin,
     exam_for_admin,
     session_for_pause,
     sitting_for_admin,
@@ -22,7 +21,7 @@ from app.core import device_lock
 from app.database import get_db
 from app.models import Admin, ExamSession
 from app.models.enums import EventType, SessionStatus
-from app.schemas.monitor import AbsentRequest, StartResult
+from app.schemas.monitor import StartResult
 from app.services import session_service
 from app.websocket.manager import manager
 
@@ -204,78 +203,3 @@ async def admit_late_candidate(
     await manager.publish("admin", "candidate_admitted", exam_id=session.exam_id,
                           data={"candidate_id": str(session.candidate_id)})
     return StartResult(started=1, end_time=end_time)
-
-
-# --- đánh dấu vắng (AD-68) -------------------------------------------------
-
-@router.post("/sittings/{sitting_id}/candidates/{candidate_id}/absent")
-async def mark_absent(
-    sitting_id: uuid.UUID,
-    candidate_id: uuid.UUID,
-    body: AbsentRequest,
-    db: AsyncSession = Depends(get_db),
-    admin: Admin = Depends(_require_proctor_or_room),
-) -> dict:
-    """Đánh dấu/bỏ vắng 1 thí sinh trong buổi.
-
-    Giám thị: chỉ thí sinh thuộc phòng mình.
-    Chủ tịch: mọi thí sinh trong kỳ thi mình.
-    Thí sinh ĐÃ ĐĂNG NHẬP (có phiên chờ/sẵn sàng/đang làm/đã nộp/hết giờ) là CÓ
-    MẶT → 409, không đánh vắng được (đăng xuất trước nếu thật sự cần)."""
-    sitting, cand = await candidate_in_sitting_for_admin(db, sitting_id, candidate_id, admin)
-    session = (await db.execute(
-        select(ExamSession).where(
-            ExamSession.sitting_id == sitting_id,
-            ExamSession.candidate_id == candidate_id,
-        )
-    )).scalar_one_or_none()
-
-    if body.absent:
-        # Bất kỳ phiên SỐNG nào (trừ chính trạng thái absent) đều nghĩa là thí sinh
-        # đã đăng nhập → không được đánh vắng. Chỉ người CHƯA đăng nhập (session
-        # None) mới đánh vắng được; phiên absent sẵn có thì idempotent.
-        if session is not None and session.status != SessionStatus.ABSENT.value:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                "Thí sinh đã đăng nhập — không đánh dấu vắng được "
-                "(đăng xuất thí sinh trước nếu thật sự cần).",
-            )
-        if session is None:
-            session = ExamSession(
-                candidate_id=candidate_id,
-                sitting_id=sitting_id,
-                exam_id=sitting.exam_id,
-                status=SessionStatus.ABSENT.value,
-            )
-            db.add(session)
-        else:
-            session.status = SessionStatus.ABSENT.value
-        await device_lock.revoke(candidate_id)
-        db.add(session_service.make_event(
-            event_type=EventType.ABSENT_MARK.value,
-            session_id=None,
-            metadata={
-                "action": "mark_absent",
-                "admin": admin.username,
-                "candidate_id": str(candidate_id),
-                "sitting_id": str(sitting_id),
-            },
-        ))
-        await db.commit()
-        await db.refresh(session)
-        return {"absent": True, "session_id": str(session.id)}
-    else:
-        if session is not None and session.status == SessionStatus.ABSENT.value:
-            await db.delete(session)
-            db.add(session_service.make_event(
-                event_type=EventType.ABSENT_MARK.value,
-                session_id=None,
-                metadata={
-                    "action": "unmark_absent",
-                    "admin": admin.username,
-                    "candidate_id": str(candidate_id),
-                    "sitting_id": str(sitting_id),
-                },
-            ))
-            await db.commit()
-        return {"absent": False, "session_id": None}

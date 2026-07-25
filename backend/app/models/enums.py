@@ -29,7 +29,9 @@ class SessionStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     SUBMITTED = "submitted"
     TIMEOUT = "timeout"
-    ABSENT = "absent"       # thí sinh vắng — giám thị/chủ tịch đánh dấu (AD-68)
+    # (Trạng thái "absent" đã gỡ — refactor đợt 3. Vắng nay tính ở BÁO CÁO cho thí
+    # sinh KHÔNG có phiên; report_service dùng literal "absent" tổng hợp, không cần
+    # enum. DB dev cũ có thể còn vài dòng status='absent' — cột là String, vô hại.)
 
 
 class AdminRole(str, Enum):
@@ -61,7 +63,6 @@ class EventType(str, Enum):
     EMERGENCY_ADD = "emergency_add"
     RESET = "reset"
     PROCTOR_LOGOUT = "proctor_logout"       # giám thị/chủ tịch đăng xuất 1 thí sinh (AD-55 M4)
-    ABSENT_MARK = "absent_mark"             # đánh dấu/bỏ vắng 1 thí sinh (AD-68/AD-55 M4)
     DISTRIBUTE = "distribute"
     EXAM_END = "exam_end"
     EXAM_PURGED = "exam_purged"             # encrypted_payload + Redis wiped after end
