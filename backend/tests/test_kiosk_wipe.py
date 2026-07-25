@@ -29,12 +29,17 @@ async def test_end_sitting_sets_wipe_then_open_clears(client, factory):
     cmd = (await client.get("/api/exam/kiosk/command")).json()
     assert cmd["wipe"] is True
 
+    # AD-114: cờ phải sống DÀI (>24h) — TTL 300s cũ tạo lỗ hổng thật: máy TẮT lúc
+    # đóng buổi bỏ lỡ cờ, hôm sau bật lên token cũ tự đăng nhập lại CCCD thí sinh
+    # trước. Không chốt số chính xác (48h) để khỏi giòn — chỉ chốt "qua đêm được".
+    assert await redis_client.ttl(wipe_key) > 24 * 3600
+
 
 async def test_open_sitting_clears_wipe_flag(client, factory):
     admin, ptok = await factory.admin(role=AdminRole.PROCTOR.value)
     exam, sitting = await factory.empty_active_exam(admin.id)
-    # Giả lập cờ wipe còn sót từ buổi trước.
-    await redis_client.set(session_service.kiosk_wipe_key(exam.id), "1", ex=300)
+    # Giả lập cờ wipe còn sót từ buổi trước (TTL bất kỳ — mở buổi phải XOÁ chủ động).
+    await redis_client.set(session_service.kiosk_wipe_key(exam.id), "1", ex=48 * 3600)
     # Nạp đề + mở buổi → cờ wipe phải bị xoá (đề mới không được wipe ngay).
     await client.post(f"/api/admin/sittings/{sitting.id}/import-qti",
                       files={"file": ("e.qenc", qenc(_build_qti_zip()), "application/octet-stream")},
