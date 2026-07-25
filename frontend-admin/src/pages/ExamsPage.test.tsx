@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { useState } from "react";
 import { render, fireEvent } from "@testing-library/react";
-import { CreateWizard } from "./ExamsPage";
+import { CreateWizard } from "./exams/CreateWizard";
 import type { SectionCreate } from "../api/exams";
 
 const INITIAL: SectionCreate = {

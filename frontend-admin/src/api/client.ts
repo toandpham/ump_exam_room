@@ -34,6 +34,9 @@ api.interceptors.response.use(
 );
 
 /** Extract a human-friendly error message from an axios error. */
+/** LƯU Ý: bản sao ĐỒNG BỘ TAY với app kia (frontend-exam/src/api/client.ts).
+ * AD-40 chốt KHÔNG làm shared package (2 app deploy độc lập, mỗi app bind-mount
+ * thư mục riêng) → sửa hàm này phải sửa CẢ HAI nơi. */
 export function errorMessage(error: unknown, fallback = "Đã có lỗi xảy ra"): string {
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data?.detail;

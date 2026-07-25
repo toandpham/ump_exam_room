@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pause, Play, Wifi } from "lucide-react";
+import { Wifi } from "lucide-react";
 import { sittingsApi } from "../api/sittings";
 import { monitorApi, type SessionSummary } from "../api/monitor";
 import { errorMessage } from "../api/client";
@@ -10,6 +10,7 @@ import StatusBadge from "../components/StatusBadge";
 import ExamCountdown from "../components/ExamCountdown";
 import SessionTable from "./monitor/SessionTable";
 import StatFilters from "./monitor/StatFilters";
+import StartExamControls from "./monitor/StartExamControls";
 import type { Filter, DisplayRow } from "./monitor/constants";
 
 interface Ctx { examId: string; sittingId: string; sitting: Sitting }
@@ -104,16 +105,7 @@ export default function MonitorPage() {
   const anyPaused = sessions.some((s) => s.paused);
   const hasFinished = sessions.some((s) => s.status === "submitted" || s.status === "timeout");
   const examOver = hasFinished && !hasRunning;
-  // SP-2b: waitingCount không còn dùng (confirm → READY tự động); chỉ cần readyCount.
   const readyCount = counts.ready ?? 0;
-  // AD-110: chỉ cho Bắt đầu thi khi MỌI máy sẵn sàng đã tải xong đề (máy thí sinh
-  // tự báo về lúc chờ). Máy hỏng/tắt ngang không bao giờ báo → có đường
-  // "bỏ qua kiểm tra" riêng (confirm cảnh báo) để 1 máy chết không kẹt cả phòng.
-  const readySessions = sessions.filter((s) => s.status === "ready");
-  const loadedCount = readySessions.filter((s) => s.preloaded).length;
-  const allLoaded = readySessions.length > 0 && loadedCount >= readySessions.length;
-  const canStart = hasExam && readyCount > 0 && !examOver;
-
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
@@ -141,61 +133,29 @@ export default function MonitorPage() {
       )}
 
       {isActive && (
-        <div className="flex gap-2 mb-4 flex-wrap items-center">
-          <CtrlBtn
-            onClick={ctrl(
-              () => start.mutateAsync(),
-              (r) => r.started
-                ? `▶ Đã bắt đầu thi cho ${r.started} thí sinh. Đồng hồ đang chạy.`
-                : "ℹ️ Chưa có thí sinh nào xác nhận thông tin.",
-              "Bạn có chắc muốn BẮT ĐẦU THI?\n\nMọi máy đã tải đủ đề. Đồng hồ sẽ chạy cho tất cả thí sinh sẵn sàng; mỗi thí sinh có đồng hồ riêng và tự nộp khi hết giờ.",
-            )}
-            disabled={!canStart || !allLoaded}
-            icon={Play} label="Bắt đầu thi" green />
-          {/* AD-110: van an toàn — máy hỏng/tắt ngang không bao giờ báo "đã tải đề",
-              không có nút này thì 1 máy chết kẹt cả phòng. */}
-          {canStart && !allLoaded && (
-            <button
-              onClick={ctrl(
-                () => start.mutateAsync(),
-                (r) => `▶ Đã bắt đầu thi cho ${r.started} thí sinh (bỏ qua kiểm tra tải đề).`,
-                `⚠️ CÒN ${readySessions.length - loadedCount} MÁY CHƯA TẢI XONG ĐỀ.\n\nCác máy đó có thể bị chậm/thiếu hình lúc đầu giờ. Chỉ nên bỏ qua khi máy đó đã hỏng/không dùng.\n\nVẫn BẮT ĐẦU THI ngay?`,
-              )}
-              className="text-xs text-amber-700 underline underline-offset-2 hover:text-amber-900"
-              title="Chỉ dùng khi có máy hỏng không thể tải đề"
-            >
-              Vẫn bắt đầu (bỏ qua {readySessions.length - loadedCount} máy chưa tải đề)
-            </button>
-          )}
-          {hasRunning && (anyPaused ? (
-            <CtrlBtn
-              onClick={ctrl(() => resumeAll.mutateAsync(),
-                (r) => `▶ Đã tiếp tục ${r.resumed} thí sinh.`,
-                "Tiếp tục CẢ BUỔI cho mọi thí sinh đang tạm dừng?")}
-              icon={Play} label="Tiếp tục cả buổi" green />
-          ) : (
-            <CtrlBtn
-              onClick={ctrl(() => pauseAll.mutateAsync(),
-                (r) => `⏸ Đã tạm dừng ${r.paused} thí sinh.`,
-                "Tạm dừng CẢ BUỔI?\n\nĐồng hồ mọi thí sinh đang làm bài sẽ dừng cho tới khi bạn bấm Tiếp tục.")}
-              icon={Pause} label="Tạm dừng cả buổi" />
-          ))}
-          {examOver ? (
-            <span className="text-xs text-slate-500">→ Đã có bài nộp. Xem <strong>Báo cáo</strong>, hoặc <strong>Đóng buổi</strong> ở đầu trang để lưu trữ.</span>
-          ) : !hasExam ? (
-            <span className="text-xs text-slate-500">→ Cần nạp đề trước</span>
-          ) : hasRunning ? (
-            <span className="text-xs text-green-700">→ Đang thi. Tạm dừng/Tiếp tục từng thí sinh ở bảng bên dưới.</span>
-          ) : readyCount === 0 ? (
-            <span className="text-xs text-slate-500">→ Đợi thí sinh đăng nhập + xác nhận</span>
-          ) : !allLoaded ? (
-            // AD-110: chờ mọi máy tải xong đề rồi mới cho bắt đầu.
-            <span className="text-xs text-amber-700">→ Đã tải đề <strong>{loadedCount}/{readySessions.length}</strong> máy — chờ đủ mới bắt đầu được</span>
-          ) : (
-            // SP-2b: confirm → READY tự động, không cần bước phân phối thủ công.
-            <span className="text-xs text-green-700">→ {readyCount} thí sinh sẵn sàng, <strong>đề đã tải đủ {loadedCount}/{readySessions.length} máy</strong> — bấm <strong>Bắt đầu thi</strong></span>
-          )}
-        </div>
+        <StartExamControls
+          sessions={sessions}
+          hasExam={hasExam}
+          hasRunning={hasRunning}
+          anyPaused={anyPaused}
+          examOver={examOver}
+          readyCount={readyCount}
+          onStart={(skip) => ctrl(
+            () => start.mutateAsync(),
+            (r) => r.started
+              ? `▶ Đã bắt đầu thi cho ${r.started} thí sinh.${skip ? " (bỏ qua kiểm tra tải đề)" : " Đồng hồ đang chạy."}`
+              : "ℹ️ Chưa có thí sinh nào xác nhận thông tin.",
+            skip
+              ? "⚠️ CÒN MÁY CHƯA TẢI XONG ĐỀ.\n\nCác máy đó có thể bị chậm/thiếu hình lúc đầu giờ. Chỉ nên bỏ qua khi máy đó đã hỏng/không dùng.\n\nVẫn BẮT ĐẦU THI ngay?"
+              : "Bạn có chắc muốn BẮT ĐẦU THI?\n\nMọi máy đã tải đủ đề. Đồng hồ sẽ chạy cho tất cả thí sinh sẵn sàng; mỗi thí sinh có đồng hồ riêng và tự nộp khi hết giờ.",
+          )()}
+          onPauseAll={ctrl(() => pauseAll.mutateAsync(),
+            (r) => `⏸ Đã tạm dừng ${r.paused} thí sinh.`,
+            "Tạm dừng CẢ BUỔI?\n\nĐồng hồ mọi thí sinh đang làm bài sẽ dừng cho tới khi bạn bấm Tiếp tục.")}
+          onResumeAll={ctrl(() => resumeAll.mutateAsync(),
+            (r) => `▶ Đã tiếp tục ${r.resumed} thí sinh.`,
+            "Tiếp tục CẢ BUỔI cho mọi thí sinh đang tạm dừng?")}
+        />
       )}
 
       {toast && (
@@ -226,16 +186,5 @@ export default function MonitorPage() {
         onResume={(s: SessionSummary) => resumeCand.mutate(s.session_id)}
       />
     </div>
-  );
-}
-
-function CtrlBtn({ onClick, disabled, icon: Icon, label, green }: {
-  onClick: () => void; disabled?: boolean; icon: any; label: string; green?: boolean;
-}) {
-  const cls = green ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700";
-  return (
-    <button onClick={onClick} disabled={disabled} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm disabled:opacity-50 ${cls}`}>
-      <Icon size={16} /> {label}
-    </button>
   );
 }
