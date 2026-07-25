@@ -115,7 +115,7 @@ khớp manifest đã ký. Kẻ trong LAN giả mDNS/đổi IP/tráo .exe đều 
 - ⚠️ **Cài im lặng + tự khởi động lại trên Windows CHƯA test được ở máy dev (không có Win)**
   — phải nghiệm thu trên 1 máy Windows thật trước khi tin dùng. Nếu installer không tự chạy
   lại app sau khi cài `/S`, cần bật autostart (Task Scheduler onlogon, xem mục vận hành).
-- 400 máy cùng tải ~62MB lúc boot = tải dồn; rải theo giờ boot, LAN dây thì ổn.
+- 400 máy cùng tải ~65MB lúc boot = tải dồn; rải theo giờ boot, LAN dây thì ổn.
 
 ## Build .exe
 Một target duy nhất (AD-76, bỏ bản portable): **NSIS installer** ia32 — chạy trên mọi
@@ -135,13 +135,14 @@ npm run dist    # → dist/UMP_ExamKiosk-Setup.exe   (NSIS installer, ia32)
   đã verify ra `arch=ia32`). Build trên Windows cũng cho kết quả tương đương.
 - Script đã ép `--ia32` (đừng để electron-builder lấy arch của máy host — Mac Apple Silicon
   sẽ ra arm64 vô dụng). `npm run dist:dir` (thêm `--ia32`) tạo thư mục unpacked nếu cần.
-- File ra ~58MB (Chromium đi kèm) — copy qua LAN/USB sang từng máy thi.
+- File ra ~65MB (Chromium đi kèm) — copy qua LAN/USB sang từng máy thi.
 
 ## Chạy thử (dev)
 `npm start` (cần `docker compose up -d` để server trả `/api/health`).
 
 ## Test
-`npm test` (node:test — config / discovery / control / lockdown / quit).
+`npm test` (node:test — config / discovery / control / lockdown / quit / gpu /
+win-policy / perf / updater / no-reboot).
 
 ## Tự chạy khi bật máy (tuỳ chọn)
 ⚠️ KHÔNG dùng `shell:startup` — app đòi quyền admin (`requireAdministrator`) nên Windows

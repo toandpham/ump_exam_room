@@ -2,7 +2,7 @@
 const { app, BrowserWindow, ipcMain, globalShortcut, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const { execFileSync, spawn } = require("child_process");
+const { spawn } = require("child_process");
 
 const { loadConfig } = require("./config");
 const { discoverServer, queryMdns, healthCheck } = require("./discovery");
@@ -10,6 +10,8 @@ const { startPolling, fetchCommand } = require("./control");
 const { checkForUpdate, fetchText, downloadFile } = require("./updater");
 const { isBlockedKey, keepOnTopActions, KIOSK_WINDOW_OPTS } = require("./lockdown");
 const { createPerf } = require("./perf");
+const { decideGpu } = require("./gpu");
+const { applyPolicies } = require("./win-policy");
 const os = require("os");
 const { handleEmergencyVerify } = require("./quit");
 
@@ -35,7 +37,6 @@ const cfg = loadConfig(path.join(appDir(), "kiosk.config.json"));
 const gpuOffFile = path.join(app.getPath("userData"), "gpu-off.flag");
 const gpuProbeFile = path.join(app.getPath("userData"), "gpu-probing.flag");
 function fileExists(p) { try { return fs.existsSync(p); } catch { return false; } }
-function markGpuBad() { try { fs.writeFileSync(gpuOffFile, String(Date.now())); } catch { /* ignore */ } }
 
 let gpuDisabled = false;
 function disableGpuNow(reason) {
@@ -46,17 +47,20 @@ function disableGpuNow(reason) {
   app.commandLine.appendSwitch("disable-gpu-compositing");
   console.error(`[KIOSK] GPU TẮT (render bằng CPU). Lý do: ${reason}`);
 }
-if (cfg.disableGpu) {
-  disableGpuNow("cấu hình disableGpu=true");
-} else if (fileExists(gpuOffFile)) {
-  disableGpuNow("máy này từng crash GPU — đã đánh dấu tắt");
-} else if (fileExists(gpuProbeFile)) {
-  // Lần thử GPU trước KHÔNG hoàn tất (app chết trước khi cửa sổ hiện) → GPU hỏng.
-  markGpuBad();
-  disableGpuNow("lần thử GPU trước bị crash — chuyển hẳn sang CPU");
-} else {
-  // Để GPU BẬT (mặc định Electron). Ghi cờ thử; sẽ xoá khi cửa sổ hiện được.
-  try { fs.writeFileSync(gpuProbeFile, String(Date.now())); } catch { /* ignore */ }
+function markGpuBad() { try { fs.writeFileSync(gpuOffFile, String(Date.now())); } catch { /* ignore */ } }
+
+// Quyết định thuần nằm ở src/gpu.js (test được); ở đây chỉ làm phần I/O.
+{
+  const d = decideGpu({
+    configDisable: cfg.disableGpu,
+    offFlag: fileExists(gpuOffFile),
+    probeFlag: fileExists(gpuProbeFile),
+  });
+  if (d.markBad) markGpuBad();
+  if (d.disable) disableGpuNow(d.reason);
+  if (d.writeProbe) {
+    try { fs.writeFileSync(gpuProbeFile, String(Date.now())); } catch { /* ignore */ }
+  }
 }
 function clearGpuProbe() { try { fs.existsSync(gpuProbeFile) && fs.unlinkSync(gpuProbeFile); } catch { /* ignore */ } }
 
@@ -88,60 +92,16 @@ function isValidHost(s) {
   return typeof s === "string" && /^[a-zA-Z0-9.-]{1,255}$/.test(s) && !s.includes("..");
 }
 
-// --- Vô hiệu hoá các mục trên màn Ctrl+Alt+Del ---
-// Không chặn được màn SAS hiện ra (kernel Windows), nhưng tắt hết lựa chọn nguy
-// hiểm: Task Manager, Khoá máy, Đổi mật khẩu, ĐĂNG XUẤT, Tắt máy từ Start.
-// QUAN TRỌNG: ghi ở CẢ HKLM (áp cho MỌI user) LẪN HKCU. App chạy elevated
-// (requireAdministrator) có thể được nâng quyền bằng MỘT tài khoản admin KHÁC →
-// khi đó HKCU là hive của admin, KHÔNG phải thí sinh đang ngồi thi → chính sách
-// per-user không có tác dụng (đây là lý do Win7 vẫn Log off/Switch user được).
-// Bản HKLM áp cho toàn máy nên đúng user nào cũng dính. Cần admin (đã có). Khôi
-// phục khi thoát.
-const _POLICY_SUBKEYS = [
-  ["Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System", "DisableTaskMgr"],
-  ["Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System", "DisableLockWorkstation"],
-  ["Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System", "DisableChangePassword"],
-  ["Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer", "NoLogoff"],
-  ["Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer", "StartMenuLogOff"],
-  ["Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer", "NoClose"],
-];
-function setTaskMgr(disabled) {   // tên giữ nguyên cho các call site; nay gồm nhiều policy
-  if (process.platform !== "win32") return;
-  for (const hive of ["HKLM", "HKCU"]) {
-    for (const [sub, name] of _POLICY_SUBKEYS) {
-      const key = `${hive}\\${sub}`;
-      const args = disabled
-        ? ["add", key, "/v", name, "/t", "REG_DWORD", "/d", "1", "/f"]
-        : ["delete", key, "/v", name, "/f"];
-      // ĐỒNG BỘ: khôi phục policy phải chạy XONG trước khi app.quit() (tránh race
-      // khiến nút Shut Down không hiện lại sau khi thoát).
-      try { execFileSync("reg", args, { stdio: "ignore" }); } catch { /* ignore */ }
-    }
-  }
-  // Ẩn nút NGUỒN (Shutdown/Restart) trên màn Ctrl+Alt+Del / đăng nhập. Đây là CHÍNH SÁCH
-  // MÁY (HKLM) → chỉ áp được khi app chạy bằng quyền Administrator; nếu không có quyền,
-  // lệnh thất bại im lặng → IT đặt thủ công 1 lần (xem README "Ẩn nút nguồn").
-  const SD = "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System";
-  const sdArgs = ["add", SD, "/v", "shutdownwithoutlogon", "/t", "REG_DWORD",
-                  "/d", disabled ? "0" : "1", "/f"];   // 0 = ẩn nút nguồn; 1 = mặc định (hiện)
-  try { execFileSync("reg", sdArgs, { stdio: "ignore" }); } catch { /* ignore */ }
-  // Ẩn "Switch user" (đổi tài khoản) trên màn Ctrl+Alt+Del / đăng nhập (HKLM, admin).
-  const suArgs = disabled
-    ? ["add", SD, "/v", "HideFastUserSwitching", "/t", "REG_DWORD", "/d", "1", "/f"]
-    : ["delete", SD, "/v", "HideFastUserSwitching", "/f"];
-  try { execFileSync("reg", suArgs, { stdio: "ignore" }); } catch { /* ignore */ }
-}
+// Khoá/gỡ chính sách máy (Ctrl+Alt+Del, Task Manager, Shutdown…) — chi tiết +
+// bộ lệnh registry nằm ở src/win-policy.js (test được). Giữ tên setTaskMgr cho
+// mọi call site cũ.
+function setTaskMgr(disabled) { applyPolicies(disabled); }
 
-// AD-93 — THOÁT KIOSK = ĐÓNG APP, TUYỆT ĐỐI KHÔNG khởi động lại máy.
-// Lịch sử: AD-77c từng cho `shutdown /r` khi thoát (vì hai lần cố "khôi phục"
-// desktop bằng cách đụng vào explorer đều hỏng trên Win11: taskkill+spawn lại →
-// explorer bị ELEVATED = màn đen; chỉ taskkill → shell không lên = màn xanh).
-// NHƯNG restart là rủi ro KHÔNG chấp nhận được cho phòng đang thi (yêu cầu vận
-// hành 22-07). Nay: chỉ gỡ policy khoá + tắt app → hiện lại desktop/taskbar vốn
-// vẫn đang chạy (app KHÔNG hề tắt explorer nữa từ AD-77c) — không đụng gì tới
-// Windows. LƯU Ý còn lại: mấy mục Start menu bị ẩn theo policy (Shut down / Log
-// off) chỉ hiện lại sau lần đăng nhập kế; tắt máy vẫn làm được bằng Ctrl+Alt+Del
-// (nút nguồn đã được khôi phục) hoặc Alt+F4 ngoài desktop.
+// AD-93 — THOÁT KIOSK = ĐÓNG APP, TUYỆT ĐỐI KHÔNG khởi động lại máy (rủi ro không
+// chấp nhận được cho phòng đang thi). App KHÔNG tắt explorer nên desktop/taskbar
+// vẫn đang chạy sẵn — chỉ cần gỡ policy + quit. Lưu ý: mục Start menu bị ẩn theo
+// policy (Shut down / Log off) chỉ hiện lại sau lần đăng nhập kế; tắt máy vẫn làm
+// được bằng Ctrl+Alt+Del hoặc Alt+F4 ngoài desktop. (Test khoá: no-reboot.test.js.)
 
 let win = null;
 let emergencyWin = null; // cửa sổ thoát khẩn cấp (sở hữu bởi main, độc lập trang thi)
@@ -283,16 +243,25 @@ async function wipeKiosk() {
   }
 }
 
-function quitKiosk() {
-  quitting = true;
+/** Dọn sạch trước khi thoát: dừng mọi hẹn giờ/tiến trình phụ + GỠ POLICY KHOÁ MÁY.
+ * Gộp ở refactor đợt 3 — trước đây 3 chỗ (quitKiosk / quitForUpdate / will-quit)
+ * lặp gần y hệt, sửa một chỗ quên hai chỗ kia là để sót khoá máy sau khi thoát.
+ * setTaskMgr(false) ĐỒNG BỘ có chủ đích: phải xong trước app.quit(). */
+function teardown() {
+  if (perf) { perf.stop(); perf = null; }
   if (keepOnTopTimer) { clearInterval(keepOnTopTimer); keepOnTopTimer = null; }
   if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
   if (manualRetryTimer) { clearTimeout(manualRetryTimer); manualRetryTimer = null; }
   closeEmergencyWindow();
   stopKeyBlocker();
   if (stopPolling) stopPolling();
-  setTaskMgr(false);   // gỡ policy khoá (Task Manager, khoá máy, nút nguồn…) — ĐỒNG BỘ
+  setTaskMgr(false);   // gỡ policy khoá (Task Manager, khoá máy, nút nguồn…)
   markLockdown(false);
+}
+
+function quitKiosk() {
+  quitting = true;
+  teardown();
   app.quit();          // AD-93: KHÔNG reboot — chỉ đóng app, trả lại desktop đang chạy
 }
 
@@ -370,15 +339,10 @@ async function runSelfUpdate(upd) {
 // Thoát để cập nhật: dọn như quitKiosk NHƯNG KHÔNG reboot (installer sẽ chạy lại app).
 // Vẫn gỡ policy khoá phòng khi bản mới không tự chạy lại → máy không kẹt Task Manager.
 function quitForUpdate() {
+  // Như quitKiosk nhưng KHÔNG phải đường thoát của giám thị: installer sẽ thay
+  // file rồi tự chạy lại app.
   quitting = true;
-  if (keepOnTopTimer) { clearInterval(keepOnTopTimer); keepOnTopTimer = null; }
-  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-  if (manualRetryTimer) { clearTimeout(manualRetryTimer); manualRetryTimer = null; }
-  closeEmergencyWindow();
-  stopKeyBlocker();
-  if (stopPolling) stopPolling();
-  setTaskMgr(false);
-  markLockdown(false);
+  teardown();
   app.quit();
 }
 
@@ -588,13 +552,8 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
   app.on("will-quit", () => {
-    if (perf) { perf.stop(); perf = null; }
     globalShortcut.unregisterAll();
-    if (keepOnTopTimer) { clearInterval(keepOnTopTimer); keepOnTopTimer = null; }
-    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-    setTaskMgr(false);
-    markLockdown(false);
-    stopKeyBlocker();
+    teardown();   // idempotent — an toàn kể cả khi quitKiosk đã gọi trước đó
   });
   app.on("window-all-closed", () => app.quit());
 }
