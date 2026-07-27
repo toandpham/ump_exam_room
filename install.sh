@@ -23,6 +23,7 @@ info()  { echo "${BOLD}[CÀI ĐẶT]${RESET} $*"; }
 die()   { echo "${BOLD}[LỖI]${RESET} $*" >&2; exit 1; }
 
 cd "$(dirname "$0")"
+FORCE=0; [ "${1:-}" = "--force" ] && FORCE=1
 
 # ── 0. Điều kiện tiên quyết ──────────────────────────────────────────────────
 [ "$(id -u)" -eq 0 ] || die "Cần quyền root — chạy:  sudo ./install.sh"
@@ -87,6 +88,36 @@ if ! docker compose ps --status running 2>/dev/null | grep -q caddy; then
         sudo systemctl stop apache2   # hoặc nginx / dịch vụ web đang chạy
         sudo systemctl disable apache2"
   done
+fi
+
+# ── 1c. Không đụng vào hệ thống khi đang có thí sinh thi ─────────────────────
+# Script này còn được dùng để NÂNG CẤP máy đã cài (bổ sung sao lưu tự động, chỉnh
+# tài nguyên…), mà bước build+khởi động lại sẽ làm VĂNG cả phòng đang làm bài.
+# Cùng chốt chặn như update.sh. Máy cài mới chưa có backend → bỏ qua.
+if docker compose ps --status running 2>/dev/null | grep -q backend; then
+  RUNNING=$(docker compose exec -T backend python - <<'PYEOF' 2>/dev/null || true
+import asyncio
+from sqlalchemy import select, func
+from app.database import AsyncSessionLocal
+from app.models import ExamSession
+from app.models.enums import SessionStatus
+async def m():
+    async with AsyncSessionLocal() as db:
+        n = await db.scalar(select(func.count()).select_from(ExamSession)
+                            .where(ExamSession.status == SessionStatus.IN_PROGRESS.value))
+        print(n)
+asyncio.run(m())
+PYEOF
+)
+  RUNNING=$(echo "$RUNNING" | tr -dc '0-9')
+  if [ -n "$RUNNING" ] && [ "$RUNNING" -gt 0 ] 2>/dev/null; then
+    if [ "$FORCE" -eq 1 ]; then
+      info "⚠️  Đang có $RUNNING thí sinh THI — vẫn chạy vì --force."
+    else
+      die "Đang có $RUNNING thí sinh đang thi. Chạy tiếp sẽ khởi động lại và làm VĂNG họ.
+      → Chờ thi xong rồi chạy lại, hoặc (nếu chắc chắn):  sudo ./install.sh --force"
+    fi
+  fi
 fi
 
 # ── 2. Sinh .env (chỉ lần đầu — chạy lại KHÔNG ghi đè) ───────────────────────
