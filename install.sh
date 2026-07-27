@@ -73,7 +73,9 @@ done
 info "Backend đã khoẻ."
 
 # ── 5. Migration DB + tài khoản mặc định (idempotent) ────────────────────────
-info "Chạy migration cơ sở dữ liệu…"
+# Backend TỰ chạy alembic lúc khởi động (backend/entrypoint.sh) nên tới đây bảng
+# đã có sẵn — giữ lệnh này làm lưới an toàn, chạy lại không hại gì.
+info "Kiểm tra cấu trúc cơ sở dữ liệu…"
 docker compose exec -T backend alembic upgrade head
 
 info "Tạo tài khoản quản trị mặc định (bỏ qua nếu đã có)…"

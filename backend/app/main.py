@@ -65,9 +65,15 @@ async def lifespan(app: FastAPI):
             await license_service.ensure_installed(_db)
     except Exception as exc:  # noqa: BLE001 — never block startup on license row
         logger.warning("ensure_installed (license) failed: %s", exc)
-    reloaded = await reconcile_active_sittings(redis_client)
-    if reloaded:
-        logger.info("Reloaded Redis payload for %d active sitting(s) after restart", reloaded)
+    # KHÔNG để bước này giết app: DB trống (cài mới, bảng chưa tạo) hay Redis trục
+    # trặc từng làm lifespan ném lỗi → backend unhealthy → Caddy không start →
+    # `docker compose up -d` fail → script cài dừng trước bước migration (27-07).
+    try:
+        reloaded = await reconcile_active_sittings(redis_client)
+        if reloaded:
+            logger.info("Reloaded Redis payload for %d active sitting(s) after restart", reloaded)
+    except Exception as exc:  # noqa: BLE001 — never block startup
+        logger.warning("reconcile_active_sittings failed: %s", exc)
     subscriber_task = asyncio.create_task(manager.run_subscriber())
     sweep_task = asyncio.create_task(_auto_submit_loop())
     yield
