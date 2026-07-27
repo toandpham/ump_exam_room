@@ -100,4 +100,5 @@ info "Chạy migration cơ sở dữ liệu…"
 docker compose exec -T backend alembic upgrade head
 
 info "✅ CẬP NHẬT XONG — hệ thống đang chạy bản $(run_git rev-parse --short HEAD)."
-echo "   (Nếu vừa sửa app THÍ SINH hoặc KIOSK: bảo thí sinh tải lại trang / phát lại file kiosk mới.)"
+echo "   (Cả 2 app web đều chạy bản BUILD — up -d --build ở trên đã dựng lại.
+    Người đang mở trang quản trị: bảo tải lại trang. Máy thi: tải lại / khởi động lại kiosk.)"

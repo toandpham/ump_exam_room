@@ -77,12 +77,14 @@ services:
         condition: service_healthy
 
   frontend-admin:
+    # Served as a PRODUCTION build (not the Vite dev server) — sự cố 27-07: lớp
+    # webhost/proxy của trường không chuyển tiếp WebSocket HMR → Vite client tự
+    # reload liên tục, trang quản trị không dùng được. Bản build không có HMR.
+    # KHÔNG bind-mount source ở đây (sẽ che dist/ trong image) → đổi code admin
+    # phải: docker compose build frontend-admin && docker compose up -d.
     build: ./frontend-admin
     restart: unless-stopped
     logging: *default-logging
-    volumes:
-      - ./frontend-admin:/app
-      - /app/node_modules
     depends_on:
       - backend
 
