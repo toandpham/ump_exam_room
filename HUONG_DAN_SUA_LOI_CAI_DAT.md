@@ -16,7 +16,15 @@ không xong. Đã sửa: backend tự tạo bảng khi khởi động.
 
 ---
 
-## Cách sửa — chạy 1 lệnh
+## Máy CHƯA CÀI BAO GIỜ — cài mới từ đầu
+
+```bash
+sudo apt-get update && sudo apt-get install -y git && cd ~ && git clone https://github.com/toandpham/ump_exam_room.git && cd ump_exam_room && sudo ./install.sh
+```
+
+Xong là dùng được ngay: `http://<IP-máy-chủ>/admin` — `admin` / `admin123`.
+
+## Máy CÀI DỞ DANG, chưa chạy được lần nào — làm lại từ đầu
 
 Dán nguyên dòng này (thay `/srv/exam` bằng thư mục đã `git clone`):
 
