@@ -24,6 +24,23 @@ Cài xong hệ thống **tự dùng thử 90 ngày**; gia hạn bằng key ở t
 
 **Đổi mật khẩu mặc định trước khi tổ chức thi thật.**
 
+## Sao lưu & khôi phục
+
+Sao lưu **tự động mỗi 10 phút** (bật sẵn khi cài): CSDL + `.env` + `uploads` →
+thư mục `backups/`. Giữ 48 bản gần nhất, trần 10 GB, tự dừng nếu đĩa còn dưới 2 GB.
+
+```bash
+systemctl status exam-backup.timer      # kiểm tra đang chạy
+./scripts/backup.sh                     # sao lưu ngay lập tức
+./scripts/restore.sh backups/exam_db_<thời-điểm>.sql.gz   # khôi phục
+```
+
+Sao lưu ra ổ USB ngoài: sửa `ExecStart` trong `/etc/systemd/system/exam-backup.service`
+thành đường dẫn USB rồi `systemctl daemon-reload && systemctl restart exam-backup.timer`.
+
+> Khôi phục sang **máy khác**: chép `backups/env.backup` thành `.env` **trước khi**
+> chạy `restore.sh` — `JWT_SECRET` phải khớp thì mới giải mã được đề đã nạp trong CSDL.
+
 ## Cập nhật hệ thống
 
 **Cách chính — qua web, không cần SSH:** đăng nhập **Quản trị** → menu **Cập nhật**

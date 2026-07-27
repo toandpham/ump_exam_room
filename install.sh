@@ -245,6 +245,40 @@ else
   info "Không có systemd — cập nhật qua web không hoạt động; dùng ./update.sh."
 fi
 
+# ── 7c. Sao lưu tự động (AD-118) ─────────────────────────────────────────────
+# BẬT MẶC ĐỊNH: mỗi 10 phút dump CSDL + đồng bộ .env/uploads vào <repo>/backups.
+# Không có nó thì hỏng ổ/lỗi máy giữa kỳ là mất trắng kết quả thi, không đường cứu.
+# Tự giới hạn chỗ chứa (48 bản ≈ 8 giờ, trần 10GB, dừng khi đĩa còn <2GB) — xem
+# scripts/backup.sh. Muốn sao lưu ra USB: sửa ExecStart thành đường dẫn USB rồi
+#   systemctl daemon-reload && systemctl restart exam-backup.timer
+# Khôi phục: ./scripts/restore.sh backups/exam_db_<thời-điểm>.sql.gz
+if command -v systemctl >/dev/null 2>&1; then
+  cat > /etc/systemd/system/exam-backup.service <<UNIT
+[Unit]
+Description=Sao luu he thong thi (CSDL + .env + uploads)
+After=docker.service
+[Service]
+Type=oneshot
+WorkingDirectory=${PWD}
+ExecStart=${PWD}/scripts/backup.sh ${PWD}/backups
+UNIT
+  cat > /etc/systemd/system/exam-backup.timer <<UNIT
+[Unit]
+Description=Sao luu he thong thi moi 10 phut
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=10min
+Persistent=true
+[Install]
+WantedBy=timers.target
+UNIT
+  chmod +x "${PWD}/scripts/backup.sh" 2>/dev/null || true
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  systemctl enable --now exam-backup.timer >/dev/null 2>&1 \
+    && info "Sao lưu tự động: BẬT (mỗi 10 phút → ${PWD}/backups)." \
+    || info "⚠️  Không bật được sao lưu tự động — chạy tay: ./scripts/backup.sh"
+fi
+
 # ── 8. Tổng kết ──────────────────────────────────────────────────────────────
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo
@@ -258,6 +292,8 @@ echo "  Giám thị     : http://${IP:-<IP-server>}/giamthi   (giamthi1..10 — 
 echo "  Thí sinh     : http://${IP:-<IP-server>}/thisinh"
 echo
 echo "  ⚠️  ĐỔI NGAY mật khẩu mặc định trước khi tổ chức thi thật."
+echo "  ℹ️  Sao lưu tự động mỗi 10 phút → ./backups (giữ 48 bản gần nhất)."
+echo "      Khôi phục:  ./scripts/restore.sh backups/exam_db_<thời-điểm>.sql.gz"
 echo "  ℹ️  Đang dùng thử 90 ngày kể từ lúc cài. Gia hạn: trang Giấy phép (tài khoản Quản trị)."
 echo "  ℹ️  Kiosk tìm server qua 'exam-server.local' (Avahi). Nếu mạng chặn mDNS: đặt"
 echo "      serverIp=\"${IP:-<IP-server>}\" trong kiosk.config.json (xem exam-kiosk/README)."
