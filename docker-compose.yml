@@ -17,15 +17,17 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    # Tuned for ~500 concurrent candidates on the Mac Mini M4 (24GB RAM).
+    # Mặc định chỉnh cho ~500 thí sinh trên máy 24GB RAM (Mac Mini M4). Máy chủ
+    # nhỏ hơn: install.sh dò RAM rồi ghi PG_* vào .env — thiếu biến thì rơi về
+    # đúng số cũ, nên máy đang chạy không đổi hành vi.
     command:
       - postgres
       - -c
-      - max_connections=600
+      - max_connections=${PG_MAX_CONNECTIONS:-600}
       - -c
-      - shared_buffers=1GB
+      - shared_buffers=${PG_SHARED_BUFFERS:-1GB}
       - -c
-      - effective_cache_size=3GB
+      - effective_cache_size=${PG_EFFECTIVE_CACHE:-3GB}
       - -c
       - work_mem=8MB
       - -c
@@ -59,10 +61,12 @@ services:
     logging: *default-logging
     # Nhiều worker để dùng nhiều nhân CPU (M4 10 nhân). 1 worker (--reload, mặc định
     # trong Dockerfile) nghẽn 1 nhân khi đông thí sinh polling (AD-69).
-    # AD-75: 6 worker × pool (15+10) = tối đa 150 kết nối < max_connections 600 —
-    # đổi số worker thì tính lại cùng database.py. Tác vụ tự-nộp dùng khoá Redis nên
-    # an toàn nhiều worker. (Bỏ --reload: đổi code backend giờ cần restart thủ công.)
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "6", "--timeout-keep-alive", "65", "--no-access-log"]
+    # AD-75: mỗi worker × pool (15+10) = tối đa 25 kết nối → WORKERS×25 phải nhỏ
+    # hơn PG_MAX_CONNECTIONS (xem database.py). install.sh dò RAM/nhân rồi ghi
+    # UVICORN_WORKERS vào .env; thiếu biến thì giữ đúng số cũ là 6. Tác vụ tự-nộp
+    # dùng khoá Redis nên an toàn nhiều worker. (Không --reload: đổi code backend
+    # cần restart thủ công.)
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "${UVICORN_WORKERS:-6}", "--timeout-keep-alive", "65", "--no-access-log"]
     env_file: .env
     volumes:
       - ./backend:/app

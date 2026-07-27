@@ -30,19 +30,56 @@ cd "$(dirname "$0")"
 command -v apt-get >/dev/null 2>&1 \
   || die "Không tìm thấy apt-get — hiện chỉ hỗ trợ Ubuntu/Debian."
 
-# ── 1. Docker Engine + Compose ───────────────────────────────────────────────
+# Dung lượng đĩa: build 2 image Node + Postgres/Redis/Caddy cần ~8 GB. Báo TRƯỚC
+# thay vì để build chết giữa chừng với lỗi khó hiểu.
+FREE_GB=$(df -BG --output=avail . 2>/dev/null | tail -1 | tr -dc '0-9')
+if [ -n "${FREE_GB:-}" ] && [ "$FREE_GB" -lt 8 ]; then
+  die "Chỉ còn ${FREE_GB} GB trống — cần tối thiểu 8 GB để build. Dọn đĩa rồi chạy lại."
+fi
+
+# ── 1. Gói phụ thuộc trên host + Docker Engine/Compose ───────────────────────
+# curl: dùng ở bước chờ backend khoẻ · python3: watcher cập-nhật-qua-web ghi
+# trạng thái · git: update.sh kéo bản vá. Trước đây curl chỉ được cài trong nhánh
+# "chưa có Docker" → máy đã cài sẵn Docker mà thiếu curl thì script treo 4 phút
+# rồi báo nhầm là "backend không lên".
+MISSING=""
+for pkg in curl python3 git ca-certificates; do
+  command -v "${pkg}" >/dev/null 2>&1 || MISSING="$MISSING $pkg"
+done
+[ -e /etc/ssl/certs/ca-certificates.crt ] || MISSING="$MISSING ca-certificates"
+if [ -n "$MISSING" ]; then
+  info "Cài gói còn thiếu trên máy chủ:$MISSING"
+  apt-get update -qq
+  # shellcheck disable=SC2086
+  apt-get install -y -qq $MISSING >/dev/null
+fi
+
 if ! command -v docker >/dev/null 2>&1; then
   info "Docker chưa có — đang cài (script chính thức get.docker.com)…"
-  apt-get update -qq
-  apt-get install -y -qq curl ca-certificates >/dev/null
   curl -fsSL https://get.docker.com | sh
-  systemctl enable --now docker
 else
   info "Docker đã có: $(docker --version)"
 fi
+# Bật khởi động cùng máy KỂ CẢ khi Docker đã cài sẵn — nếu không, sau khi cúp
+# điện/reboot thì Docker không chạy và cả hệ thống thi im lặng không lên.
+systemctl enable --now docker >/dev/null 2>&1 || true
 docker compose version >/dev/null 2>&1 \
   || { info "Cài docker compose plugin…"; apt-get install -y -qq docker-compose-plugin >/dev/null; }
 info "Compose: $(docker compose version --short)"
+
+# ── 1b. Cổng 80/443 phải trống ───────────────────────────────────────────────
+# Nhiều trường đã có sẵn web server (Apache/nginx/webhost) giữ cổng 80 → Caddy
+# không bind được và compose báo "port is already allocated" ở giữa chừng. Bắt
+# TRƯỚC, kèm tên tiến trình đang giữ cổng để IT xử lý.
+if ! docker compose ps --status running 2>/dev/null | grep -q caddy; then
+  for P in 80 443; do
+    HOLDER=$(ss -ltnp 2>/dev/null | awk -v p=":$P\$" '$4 ~ p {print $NF; exit}')
+    [ -n "$HOLDER" ] && die "Cổng $P đang bị chiếm bởi: $HOLDER
+      Hệ thống thi cần cổng 80 (và 443). Hãy dừng dịch vụ đó rồi chạy lại:
+        sudo systemctl stop apache2   # hoặc nginx / dịch vụ web đang chạy
+        sudo systemctl disable apache2"
+  done
+fi
 
 # ── 2. Sinh .env (chỉ lần đầu — chạy lại KHÔNG ghi đè) ───────────────────────
 if [ ! -f .env ]; then
@@ -57,6 +94,36 @@ if [ ! -f .env ]; then
   info "Đã tạo .env (JWT secret + mật khẩu DB ngẫu nhiên, ENVIRONMENT=production)."
 else
   info ".env đã tồn tại — giữ nguyên."
+fi
+# .env chứa JWT_SECRET (khoá mã hoá đề lưu trong DB dẫn xuất từ đây) + mật khẩu
+# CSDL → không để người dùng khác trên máy chủ đọc được.
+chmod 600 .env
+
+# ── 2b. Chỉnh tài nguyên theo cấu hình máy chủ ────────────────────────────────
+# Các con số mặc định trong docker-compose.yml được chọn cho máy 24 GB RAM/10 nhân
+# (máy thi gốc). Máy chủ nhà trường nhỏ hơn mà vẫn dùng số đó thì Postgres + 6
+# worker sẽ tranh nhau RAM → swap → chậm hoặc bị OOM-kill giữa buổi thi. Ghi mức
+# phù hợp vào .env (compose đọc, thiếu thì dùng mặc định cũ).
+if ! grep -q '^UVICORN_WORKERS=' .env 2>/dev/null; then
+  MEM_MB=$(free -m 2>/dev/null | awk '/^Mem:/{print $2}')
+  CPUS=$(nproc 2>/dev/null || echo 2)
+  MEM_MB=${MEM_MB:-8000}
+  if   [ "$MEM_MB" -ge 16000 ]; then WORKERS=6; SHB=1GB;   CACHE=3GB; MAXC=600
+  elif [ "$MEM_MB" -ge 8000  ]; then WORKERS=4; SHB=512MB; CACHE=2GB; MAXC=400
+  else                               WORKERS=2; SHB=256MB; CACHE=1GB; MAXC=200
+  fi
+  [ "$WORKERS" -gt "$CPUS" ] && WORKERS=$CPUS
+  [ "$WORKERS" -lt 2 ] && WORKERS=2
+  {
+    echo ""
+    echo "# --- Tài nguyên máy chủ (install.sh tự đặt theo RAM ${MEM_MB}MB / ${CPUS} nhân) ---"
+    echo "# Mỗi worker dùng tối đa 25 kết nối CSDL → WORKERS×25 phải < PG_MAX_CONNECTIONS."
+    echo "UVICORN_WORKERS=${WORKERS}"
+    echo "PG_MAX_CONNECTIONS=${MAXC}"
+    echo "PG_SHARED_BUFFERS=${SHB}"
+    echo "PG_EFFECTIVE_CACHE=${CACHE}"
+  } >> .env
+  info "Tài nguyên: ${MEM_MB}MB RAM / ${CPUS} nhân → ${WORKERS} worker, Postgres ${SHB}."
 fi
 
 # ── 3. Build + khởi động stack ───────────────────────────────────────────────

@@ -102,6 +102,20 @@ sudo ./install.sh
 
 ---
 
+## Lỗi "port is already allocated" (cổng 80 bị chiếm)
+
+Máy chủ đã có sẵn web server (Apache/nginx/webhost) giữ cổng 80 → Caddy không
+khởi động được. Xem ai đang giữ cổng rồi dừng dịch vụ đó:
+
+```bash
+sudo ss -ltnp | grep -E ':80|:443'
+sudo systemctl stop apache2 && sudo systemctl disable apache2   # hoặc nginx
+cd /srv/exam && sudo ./install.sh
+```
+
+Bản `install.sh` mới kiểm tra sẵn điều này và báo tên tiến trình đang chiếm cổng
+trước khi build.
+
 ## Lưu ý về lớp webhost đặt trước server
 
 Nếu trường đặt thêm một lớp webhost/proxy phía trước, cần bật chuyển tiếp
