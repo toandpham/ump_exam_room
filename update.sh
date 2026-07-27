@@ -90,7 +90,9 @@ docker compose restart caddy >/dev/null
 # ── 4. Chờ backend khoẻ ──────────────────────────────────────────────────────
 info "Chờ hệ thống sẵn sàng…"
 for i in $(seq 1 120); do
-  curl -fsS http://localhost/health >/dev/null 2>&1 && break
+  # /api/health, KHÔNG phải /health — xem ghi chú trong install.sh (Caddy trả 200
+  # rỗng cho /health nên nó báo khoẻ cả khi backend đã chết).
+  curl -fsS http://localhost/api/health >/dev/null 2>&1 && break
   [ "$i" -eq 120 ] && die "Backend không lên sau 4 phút — xem log:  docker compose logs backend"
   sleep 2
 done

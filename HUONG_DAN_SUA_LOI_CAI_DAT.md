@@ -41,7 +41,7 @@ docker compose up -d --build
 
 ```bash
 docker compose ps
-curl -fsS http://localhost/health && echo "  -- OK"
+curl -fsS http://localhost/api/health && echo "  -- OK"
 ```
 
 Đúng thì thấy **backend, postgres, redis, frontend-admin, frontend-exam ở trạng

@@ -149,8 +149,11 @@ docker compose up -d --build
 
 # ── 4. Chờ backend khoẻ ──────────────────────────────────────────────────────
 info "Chờ hệ thống sẵn sàng…"
+# PHẢI là /api/health (Caddy chuyển tiếp về backend). Đường `/health` KHÔNG có
+# route nào trong Caddyfile → Caddy trả 200 rỗng, tức nó báo "khoẻ" kể cả khi
+# backend đã TẮT HẲN (đã đo: backend stop → /health vẫn 200, /api/health 502).
 for i in $(seq 1 120); do
-  if curl -fsS http://localhost/health >/dev/null 2>&1; then break; fi
+  if curl -fsS http://localhost/api/health >/dev/null 2>&1; then break; fi
   [ "$i" -eq 120 ] && die "Backend không lên sau 4 phút — xem log:  docker compose logs backend"
   sleep 2
 done
