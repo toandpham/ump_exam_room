@@ -42,16 +42,24 @@ fi
 # trạng thái · git: update.sh kéo bản vá. Trước đây curl chỉ được cài trong nhánh
 # "chưa có Docker" → máy đã cài sẵn Docker mà thiếu curl thì script treo 4 phút
 # rồi báo nhầm là "backend không lên".
+# Dò theo LỆNH có sẵn, không theo tên gói (ca-certificates/iproute2 không phải
+# lệnh). Máy đã đủ thứ thì KHÔNG đụng tới apt — quan trọng vì `apt-get update`
+# hỏng (repo sai, mạng chặn) sẽ giết cả script dù chẳng thiếu gì.
 MISSING=""
-for pkg in curl python3 git ca-certificates; do
-  command -v "${pkg}" >/dev/null 2>&1 || MISSING="$MISSING $pkg"
-done
+command -v curl    >/dev/null 2>&1 || MISSING="$MISSING curl"
+command -v python3 >/dev/null 2>&1 || MISSING="$MISSING python3"
+command -v git     >/dev/null 2>&1 || MISSING="$MISSING git"
+command -v ss      >/dev/null 2>&1 || MISSING="$MISSING iproute2"
+command -v rsync   >/dev/null 2>&1 || MISSING="$MISSING rsync"
 [ -e /etc/ssl/certs/ca-certificates.crt ] || MISSING="$MISSING ca-certificates"
 if [ -n "$MISSING" ]; then
   info "Cài gói còn thiếu trên máy chủ:$MISSING"
-  apt-get update -qq
+  apt-get update -qq || info "⚠️  apt-get update lỗi — thử cài bằng danh mục sẵn có."
   # shellcheck disable=SC2086
-  apt-get install -y -qq $MISSING >/dev/null
+  apt-get install -y -qq $MISSING >/dev/null \
+    || die "Không cài được:$MISSING
+      Máy chủ cần các gói này. Kiểm tra mạng/nguồn apt rồi cài tay:
+        sudo apt-get update && sudo apt-get install -y$MISSING"
 fi
 
 if ! command -v docker >/dev/null 2>&1; then
@@ -96,7 +104,12 @@ else
   info ".env đã tồn tại — giữ nguyên."
 fi
 # .env chứa JWT_SECRET (khoá mã hoá đề lưu trong DB dẫn xuất từ đây) + mật khẩu
-# CSDL → không để người dùng khác trên máy chủ đọc được.
+# CSDL → không để người dùng khác trên máy chủ đọc được. Nhưng phải TRẢ QUYỀN cho
+# người đã clone repo: install chạy bằng sudo, để root:root 600 thì IT gõ
+# `docker compose ps` bằng tài khoản thường (đã ở nhóm docker) sẽ không đọc được
+# .env → compose báo lỗi ở mọi lệnh.
+REPO_OWNER=$(stat -c '%U:%G' .git 2>/dev/null || echo "")
+[ -n "$REPO_OWNER" ] && chown "$REPO_OWNER" .env 2>/dev/null || true
 chmod 600 .env
 
 # ── 2b. Chỉnh tài nguyên theo cấu hình máy chủ ────────────────────────────────
@@ -105,9 +118,13 @@ chmod 600 .env
 # worker sẽ tranh nhau RAM → swap → chậm hoặc bị OOM-kill giữa buổi thi. Ghi mức
 # phù hợp vào .env (compose đọc, thiếu thì dùng mặc định cũ).
 if ! grep -q '^UVICORN_WORKERS=' .env 2>/dev/null; then
-  MEM_MB=$(free -m 2>/dev/null | awk '/^Mem:/{print $2}')
+  # Đọc /proc/meminfo chứ KHÔNG dùng `free`: bản Linux tối giản không cài gói
+  # procps → `free` không tồn tại → cả script chết ngay sau khi tạo .env
+  # (đã tái hiện trên debian:12-slim, exit 127).
+  MEM_MB=$(awk '/^MemTotal:/{print int($2/1024)}' /proc/meminfo 2>/dev/null || true)
   CPUS=$(nproc 2>/dev/null || echo 2)
   MEM_MB=${MEM_MB:-8000}
+  CPUS=${CPUS:-2}
   if   [ "$MEM_MB" -ge 16000 ]; then WORKERS=6; SHB=1GB;   CACHE=3GB; MAXC=600
   elif [ "$MEM_MB" -ge 8000  ]; then WORKERS=4; SHB=512MB; CACHE=2GB; MAXC=400
   else                               WORKERS=2; SHB=256MB; CACHE=1GB; MAXC=200
@@ -143,7 +160,8 @@ info "Backend đã khoẻ."
 # Backend TỰ chạy alembic lúc khởi động (backend/entrypoint.sh) nên tới đây bảng
 # đã có sẵn — giữ lệnh này làm lưới an toàn, chạy lại không hại gì.
 info "Kiểm tra cấu trúc cơ sở dữ liệu…"
-docker compose exec -T backend alembic upgrade head
+docker compose exec -T backend alembic upgrade head \
+  || info "⚠️  (Bảng đã được backend tạo lúc khởi động — bỏ qua bước này.)"
 
 info "Tạo tài khoản quản trị mặc định (bỏ qua nếu đã có)…"
 docker compose exec -T backend python - <<'PYEOF'
@@ -177,7 +195,9 @@ PYEOF
 # KHÔNG hỏi key khi cài. Cài xong TỰ dùng thử 90 ngày (backend đặt mốc installed_at
 # ở startup). Muốn gia hạn về sau → nhập key ở trang Giấy phép (đăng nhập Quản trị)
 # hoặc CLI: docker compose exec backend python -m app.set_license '<key>'
-LICENSE_STATE=$(docker compose exec -T backend python - <<'PYEOF'
+# `|| true` + ${1:-} : chỉ là dòng THÔNG BÁO — không được phép làm hỏng cả lượt
+# cài đã thành công (set -u sẽ chết vì "$1: unbound variable" nếu lệnh trả rỗng).
+LICENSE_STATE=$(docker compose exec -T backend python - <<'PYEOF' || true
 import asyncio
 from app.services import license_service
 from app.database import AsyncSessionLocal
@@ -188,13 +208,16 @@ async def main():
 asyncio.run(main())
 PYEOF
 )
-set -- $LICENSE_STATE
-if [ "$1" = "trial" ]; then
+# shellcheck disable=SC2086
+set -- ${LICENSE_STATE:-}
+if [ "${1:-}" = "trial" ]; then
   info "Giấy phép: đang dùng thử — còn ${2:-90} ngày. Gia hạn sau tại trang Giấy phép."
-elif [ "$1" = "valid" ]; then
+elif [ "${1:-}" = "valid" ]; then
   info "Giấy phép: đang hoạt động — còn ${2:-?} ngày."
-else
+elif [ -n "${1:-}" ]; then
   info "⚠️  Giấy phép: $1 — vào trang Giấy phép (tài khoản Quản trị) để nhập key gia hạn."
+else
+  info "Giấy phép: không đọc được trạng thái — kiểm tra ở trang Giấy phép sau khi đăng nhập."
 fi
 
 # ── 7. mDNS: quảng bá exam-server.local để KIOSK tự tìm server ───────────────
@@ -259,6 +282,9 @@ Description=Sao luu he thong thi (CSDL + .env + uploads)
 After=docker.service
 [Service]
 Type=oneshot
+# pg_dump treo (Postgres kẹt) không được giữ đơn vị này chạy mãi — hẹn giờ chỉ
+# chạy lượt kế sau khi lượt trước kết thúc.
+TimeoutStartSec=900
 WorkingDirectory=${PWD}
 ExecStart=${PWD}/scripts/backup.sh ${PWD}/backups
 UNIT
