@@ -24,8 +24,8 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
   const [submitOpen, setSubmitOpen] = useState(false);
   // Nộp/hết giờ → xoá giấy nháp của phiên rồi chuyển sang màn kết quả.
   const handleSubmitted = () => { clearNotes(sessionId); onSubmitted(); };
-  const { answers, selectOption, saveStatus, secondsLeft, paused, timeUp, doSubmit, tabCount,
-          submitError, clearSubmitError } =
+  const { answers, selectOption, flags, toggleFlag, saveStatus, secondsLeft, paused, timeUp,
+          doSubmit, tabCount, submitError, clearSubmitError } =
     useExamSession(sessionId, data, handleSubmitted, ws);
 
   // AD-90/AD-110: CHEN HÀNG vài câu KẾ TIẾP lên trước hàng đợi nền. Toàn bộ đề đã
@@ -50,6 +50,17 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
     }
   }, [data, answers, current]);
 
+  // Nhảy tới câu ĐÃ ĐÁNH DẤU kế tiếp (quét vòng từ vị trí hiện tại, y như nút
+  // "chưa làm"). Cùng ràng buộc AD-90b: phải ổn định giữa các nhịp đồng hồ.
+  const goToNextFlagged = useCallback(() => {
+    if (!data) return;
+    const n = data.total;
+    for (let step = 1; step <= n; step++) {
+      const i = (current + step) % n;
+      if (flags[data.questions[i].id]) { setCurrent(i); return; }
+    }
+  }, [data, flags, current]);
+
   // Submitting is final — confirm via an IN-PAGE modal (không dùng confirm() gốc
   // của Windows: trong kiosk nó là cửa sổ riêng → kẹt + làm lớp chặn phím tạm ngưng).
   const confirmSubmit = useCallback(() => setSubmitOpen(true), []);
@@ -60,6 +71,7 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
 
   const answeredCount = data.questions.filter((x) => answers[x.id]).length;
   const unansweredCount = data.total - answeredCount;
+  const flaggedCount = data.questions.filter((x) => flags[x.id]).length;
 
   return (
     <div className="h-screen flex flex-col bg-slate-100 overflow-hidden">
@@ -125,8 +137,11 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
           total={data.total}
           answeredCount={answeredCount}
           unansweredCount={unansweredCount}
+          flaggedCount={flaggedCount}
+          flags={flags}
           onSelect={setCurrent}
           onJumpUnanswered={goToNextUnanswered}
+          onJumpFlagged={goToNextFlagged}
         />
 
         {/* Main — scrolls independently of the (tall) navigator; the question is
@@ -138,6 +153,8 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
             total={data.total}
             answers={answers}
             unansweredCount={unansweredCount}
+            flagged={!!flags[data.questions[current].id]}
+            onToggleFlag={toggleFlag}
             onSelect={selectOption}
             onPrev={goPrev}
             onNext={goNext}

@@ -21,7 +21,7 @@ describe("QuestionCard", () => {
   it("renders the stem, positional A–D labels and option text", () => {
     const { container, getByText } = render(
       <QuestionCard q={Q} index={0} total={10} answers={{}} unansweredCount={3}
-        onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+        flagged={false} onToggleFlag={noop} onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
     );
     expect(container.textContent).toContain("Thủ đô Việt Nam?");
     expect(container.textContent).toContain("Câu 1/10");
@@ -33,7 +33,7 @@ describe("QuestionCard", () => {
     const onSelect = vi.fn();
     const { getByText } = render(
       <QuestionCard q={Q} index={0} total={1} answers={{}} unansweredCount={0}
-        onSelect={onSelect} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+        flagged={false} onToggleFlag={noop} onSelect={onSelect} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
     );
     getByText("Đà Nẵng").click();
     expect(onSelect).toHaveBeenCalledWith("q1", "C");
@@ -42,13 +42,13 @@ describe("QuestionCard", () => {
   it("shows 'Nộp bài' on the last question and 'Câu sau' otherwise", () => {
     const last = render(
       <QuestionCard q={Q} index={0} total={1} answers={{}} unansweredCount={0}
-        onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+        flagged={false} onToggleFlag={noop} onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
     );
     expect(last.container.textContent).toContain("Nộp bài");
 
     const mid = render(
       <QuestionCard q={Q} index={0} total={5} answers={{}} unansweredCount={0}
-        onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+        flagged={false} onToggleFlag={noop} onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
     );
     expect(mid.container.textContent).toContain("Câu sau");
   });
@@ -61,7 +61,7 @@ describe("QuestionCard", () => {
     };
     const { container } = render(
       <QuestionCard q={q} index={0} total={1} answers={{}} unansweredCount={0}
-        onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+        flagged={false} onToggleFlag={noop} onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
     );
     const inline = container.querySelector("img")!;
     expect(inline.getAttribute("src")).toBe("/uploads/full_t.jpg");   // trong bài: bản nhỏ
@@ -83,7 +83,7 @@ describe("QuestionCard", () => {
     };
     const { container } = render(
       <QuestionCard q={q} index={0} total={1} answers={{}} unansweredCount={0}
-        onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+        flagged={false} onToggleFlag={noop} onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
     );
     // Ảnh phải nằm GIỮA hai đoạn chữ (không dồn xuống cuối).
     const nodes = Array.from(container.querySelectorAll("p, img"));
@@ -91,5 +91,27 @@ describe("QuestionCard", () => {
       .filter((n) => n.tagName === "IMG" || (n.textContent || "").includes("nghiệm") || (n.textContent || "").includes("Chẩn đoán nào sau"))
       .map((n) => (n.tagName === "IMG" ? "img" : "text"));
     expect(kinds).toEqual(["text", "img", "text"]);
+  });
+
+  // ── Cờ "cần xem lại" (27-07) ──
+  it("bấm nút đánh dấu thì báo đúng mã câu", () => {
+    const onToggleFlag = vi.fn();
+    const { getByTitle } = render(
+      <QuestionCard q={Q} index={0} total={1} answers={{}} unansweredCount={0}
+        flagged={false} onToggleFlag={onToggleFlag}
+        onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+    );
+    getByTitle("Đánh dấu để xem lại sau").click();
+    expect(onToggleFlag).toHaveBeenCalledWith("q1");
+  });
+
+  it("đang đánh dấu thì nút đổi nhãn để bỏ đánh dấu", () => {
+    const { container, getByTitle } = render(
+      <QuestionCard q={Q} index={0} total={1} answers={{}} unansweredCount={0}
+        flagged={true} onToggleFlag={noop}
+        onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+    );
+    expect(container.textContent).toContain("Đã đánh dấu");
+    expect(getByTitle("Bỏ đánh dấu câu này")).toBeTruthy();
   });
 });

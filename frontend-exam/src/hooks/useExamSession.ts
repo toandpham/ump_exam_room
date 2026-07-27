@@ -58,6 +58,15 @@ export function useExamSession(
   const ansKeyRef = useRef(ansKey);
   ansKeyRef.current = ansKey;
 
+  // Cờ "cần xem lại" — công cụ CÁ NHÂN của thí sinh, giống Giấy nháp: chỉ nằm trên
+  // máy đang thi, KHÔNG gửi lên server, giám thị KHÔNG thấy (quyết định vận hành
+  // 27-07). Nhờ vậy không cần cột CSDL/endpoint mới và không thêm tải cho 500 máy.
+  // Đánh dấu độc lập với việc đã trả lời hay chưa: chọn đáp án rồi vẫn gắn cờ được.
+  const [flags, setFlags] = useState<Record<string, true>>({});
+  const flagKey = `flags_${sessionId}`;
+  const flagKeyRef = useRef(flagKey);
+  flagKeyRef.current = flagKey;
+
   // Borrow the shared socket (owned by ExamShell): end-exam control pushes
   // everyone to the result screen; tab changes are reported via `send`.
   const { send, subscribe } = ws;
@@ -76,6 +85,8 @@ export function useExamSession(
     if (!data) return;
     const stored = JSON.parse(localStorage.getItem(ansKey) || "{}");
     setAnswers({ ...data.answers, ...stored });
+    // Cờ chỉ có ở máy này (server không giữ) → khôi phục sau khi tải lại trang.
+    try { setFlags(JSON.parse(localStorage.getItem(flagKey) || "{}")); } catch { /* bỏ qua */ }
     if (data.time_remaining_seconds != null) setSecondsLeft(data.time_remaining_seconds);
   }, [data]);
 
@@ -180,6 +191,19 @@ export function useExamSession(
     setSaveStatus("saved");                                // đã an toàn ở máy con
   }, []);
 
+  /** Bật/tắt cờ "cần xem lại" cho 1 câu. Ghi localStorage ngay (mỗi buổi thi chỉ
+   * bấm vài chục lần — không cần dồn nhịp như Giấy nháp, vốn ghi theo từng phím).
+   * KHÔNG khoá khi hết giờ/tạm dừng: đây chỉ là ghi chú cá nhân, không phải bài làm.
+   * AD-90b: giữ nguyên danh tính giữa các lần vẽ lại để React.memo còn tác dụng. */
+  const toggleFlag = useCallback((qid: string) => {
+    setFlags((prev) => {
+      const next = { ...prev };
+      if (next[qid]) delete next[qid]; else next[qid] = true;
+      localStorage.setItem(flagKeyRef.current, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   // Thực hiện nộp bài (KHÔNG hỏi xác nhận ở đây — xác nhận do màn thi hiện hộp
   // thoại TRONG TRANG; tránh confirm() gốc của Windows vì trong chế độ kiosk nó là
   // cửa sổ riêng → dễ kẹt/cướp focus). `auto` giữ lại cho tương thích lời gọi.
@@ -198,12 +222,14 @@ export function useExamSession(
       try {
         await examApi.submit();
         localStorage.removeItem(ansKey);
+        localStorage.removeItem(flagKey);
         onSubmitted();
         return;
       } catch (err) {
         // 4xx = server đã chốt phiên này rồi (đã nộp / hết giờ tự nộp) → coi như xong.
         if (isPermanentError(err)) {
           localStorage.removeItem(ansKey);
+          localStorage.removeItem(flagKey);
           onSubmitted();
           return;
         }
@@ -218,6 +244,6 @@ export function useExamSession(
     );
   }
 
-  return { answers, selectOption, saveStatus, secondsLeft, paused, timeUp, doSubmit,
-           tabCount, submitError, clearSubmitError: () => setSubmitError(null) };
+  return { answers, selectOption, flags, toggleFlag, saveStatus, secondsLeft, paused, timeUp,
+           doSubmit, tabCount, submitError, clearSubmitError: () => setSubmitError(null) };
 }

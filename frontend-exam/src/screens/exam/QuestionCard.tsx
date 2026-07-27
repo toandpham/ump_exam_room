@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { ChevronLeft, ChevronRight, Send, SkipForward } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flag, Send, SkipForward } from "lucide-react";
 import type { ExamQuestion } from "../../api/exam";
 
 /** The centered question card: stem + images, the 4 options (positional A/B/C/D
@@ -7,14 +7,18 @@ import type { ExamQuestion } from "../../api/exam";
  * Submit is a floating button bottom-right. Images are click-to-zoom (AD-69).
  * AD-90b: memo — khỏi vẽ lại theo mỗi nhịp đồng hồ (xem QuestionNavigator). */
 function QuestionCard({
-  q, index, total, answers, unansweredCount, onSelect, onPrev, onNext, onJumpUnanswered, onSubmit,
+  q, index, total, answers, unansweredCount, flagged, onSelect, onToggleFlag,
+  onPrev, onNext, onJumpUnanswered, onSubmit,
 }: {
   q: ExamQuestion;
   index: number;
   total: number;
   answers: Record<string, string>;
   unansweredCount: number;
+  /** Câu này đang được thí sinh đánh dấu "cần xem lại" (chỉ lưu trên máy). */
+  flagged: boolean;
   onSelect: (qid: string, opt: string) => void;
+  onToggleFlag: (qid: string) => void;
   onPrev: () => void;
   onNext: () => void;
   onJumpUnanswered: () => void;
@@ -28,8 +32,23 @@ function QuestionCard({
   return (
     <div className="my-auto w-full">
       <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm p-6">
-        <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-slate-500">Câu {index + 1}/{total}</h2>
+          {/* Đánh dấu để quay lại sau. Ghi chú riêng của thí sinh — không gửi lên
+              máy chủ, giám thị không thấy, không ảnh hưởng bài làm. */}
+          <button
+            onClick={() => onToggleFlag(q.id)}
+            aria-pressed={flagged}
+            title={flagged ? "Bỏ đánh dấu câu này" : "Đánh dấu để xem lại sau"}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border ${
+              flagged
+                ? "bg-amber-500 text-white border-amber-500"
+                : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"
+            }`}
+          >
+            <Flag size={15} className={flagged ? "fill-white" : ""} />
+            {flagged ? "Đã đánh dấu" : "Đánh dấu xem lại"}
+          </button>
         </div>
 
         {/* Nội dung câu hỏi. AD-98: nếu có `blocks` (đề nạp mới) → render chữ ↔ ảnh
