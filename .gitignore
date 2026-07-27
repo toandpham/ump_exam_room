@@ -10,9 +10,7 @@
 /tools/license-keygen/
 
 # Nội bộ / lỗi thời — không đưa lên repo công khai (giữ cục bộ)
-/CLAUDE.md
 /EXAM_SYSTEM_PROMPT.md
-/docs/superpowers/
 /docs/seb-acceptance.md
 /kiosk-win7/
 /Phong_thi_truc_tuyen.pptx
