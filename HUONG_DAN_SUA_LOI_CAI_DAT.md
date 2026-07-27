@@ -16,24 +16,23 @@ không xong. Đã sửa: backend tự tạo bảng khi khởi động.
 
 ---
 
-## Cách sửa — chạy đúng 3 lệnh
+## Cách sửa — chạy 1 lệnh
+
+Dán nguyên dòng này (thay `/srv/exam` bằng thư mục đã `git clone`):
 
 ```bash
-cd /srv/exam
-git pull
-docker compose up -d --build
+cd /srv/exam && docker compose down -v; rm -f .env; git stash; git pull && sudo ./install.sh
 ```
 
-> Lần đầu build lại có thể mất 5–10 phút. **Không mất dữ liệu**, không cần xoá gì.
+Chạy mất 5–10 phút. Xong là hệ thống chạy được ngay, có sẵn tài khoản.
 
-Nếu `git pull` báo lỗi vì máy đã sửa file cục bộ:
+> ⚠️ **Chỉ dùng cho máy CHƯA cài xong lần nào.** Lệnh này xoá sạch cơ sở dữ liệu để
+> làm lại từ đầu — máy đã tổ chức thi và có kết quả thí sinh thì **không được dùng**,
+> máy đó chỉ chạy: `cd /srv/exam && git pull && sudo ./install.sh`
 
-```bash
-cd /srv/exam
-git stash
-git pull
-docker compose up -d --build
-```
+> Vì sao xoá `.env` cùng lúc với cơ sở dữ liệu: `.env` giữ mật khẩu CSDL, còn CSDL nhớ
+> mật khẩu từ lần tạo đầu tiên. Xoá một trong hai rồi cài lại sẽ sinh mật khẩu lệch
+> nhau → backend báo `password authentication failed`, triệu chứng nhìn y hệt lỗi cũ.
 
 ---
 
