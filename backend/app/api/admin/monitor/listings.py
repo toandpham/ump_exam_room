@@ -117,6 +117,14 @@ async def list_sessions(
         flags = await redis_client.mget(
             [session_service.preload_key(s.id) for s, _, _ in rows_list])
     preloaded_by_idx = {i: bool(v) for i, v in enumerate(flags)}
+    # AD-122: nhịp tim của từng máy (1 cú MGET) → cờ "mất kết nối" cho giám sát.
+    # Chỉ có ý nghĩa với phiên CÒN ĐANG CẦN online; nộp xong tắt máy đi về là bình
+    # thường, không được báo động.
+    from app.core import device_lock
+    NEEDS_ONLINE = {SessionStatus.WAITING.value, SessionStatus.READY.value,
+                    SessionStatus.IN_PROGRESS.value}
+    beats = await device_lock.get_active_many([c.id for _, c, _ in rows_list])
+    seen_by_idx = {i: device_lock.seconds_since_seen(b) for i, b in enumerate(beats)}
     return [
         SessionSummary(
             session_id=s.id, candidate_id=c.id, cccd=c.cccd, full_name=c.full_name,
@@ -130,6 +138,11 @@ async def list_sessions(
             paused=s.paused_at is not None,
             room_id=c.room_id, room_name=room_name,
             preloaded=preloaded_by_idx.get(i, False),
+            info_disputed=c.info_disputed_at is not None,
+            last_seen_seconds=seen_by_idx.get(i),
+            offline=(s.status in NEEDS_ONLINE
+                     and (seen_by_idx.get(i) is None
+                          or seen_by_idx[i] >= device_lock.OFFLINE_ALERT_SECONDS)),
         )
         for i, (s, c, room_name) in enumerate(rows_list)
     ]
@@ -189,6 +202,7 @@ async def sitting_roster(
                 unit=c.unit, category=c.category, attempt_number=c.attempt_number,
                 photo_path=c.photo_path, self_registered=c.self_registered,
                 room_name=room_name,
+                info_disputed=c.info_disputed_at is not None,
             )
             for c, room_name in pending
         ],

@@ -8,6 +8,7 @@ import { monitorApi, type SessionSummary } from "../api/monitor";
 import ExamCountdown from "../components/ExamCountdown";
 import { STATUS_LABEL } from "./monitor/constants";
 import AddCandidateModal from "./rooms/AddCandidateModal";
+import { offlineLabel } from "../lib/offline";
 
 type RoomFilter = "all" | "logged_in" | "not_logged_in" | "in_progress" | "submitted";
 
@@ -173,6 +174,18 @@ function RoomBlock({ room }: { room: MyRoom }) {
                       )}
                       {isAbsent && (
                         <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">Vắng</span>
+                      )}
+                      {s?.offline && (
+                        <span title="Máy này đã ngừng gọi về máy chủ — kiểm tra mạng/máy của thí sinh"
+                          className="ml-2 text-xs px-1.5 py-0.5 rounded bg-slate-700 text-white font-semibold">
+                          ⚡ {offlineLabel(s.last_seen_seconds)}
+                        </span>
+                      )}
+                      {row.info_disputed && (
+                        <span title="Thí sinh báo thông tin cá nhân bị sai — sửa lại giúp thí sinh"
+                          className="ml-2 text-xs px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-semibold">
+                          ⚠ Báo sai thông tin
+                        </span>
                       )}
                     </td>
                     <td className="px-3 py-2 font-mono">

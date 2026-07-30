@@ -248,7 +248,8 @@ async def room_seating(
     ))
     return [
         RoomSeat(candidate_id=c.id, full_name=c.full_name, cccd=c.cccd,
-                 id_type=c.id_type, unit=c.unit, birth_date=c.birth_date)
+                 id_type=c.id_type, unit=c.unit, birth_date=c.birth_date,
+                 info_disputed=c.info_disputed_at is not None)
         for c in cands
     ]
 

@@ -9,13 +9,40 @@ function session(over: Partial<SessionSummary> = {}): SessionSummary {
     session_id: "s1", candidate_id: "c1", cccd: "079000000001", full_name: "Trần Văn A",
     unit: "Đơn vị 1", category: "ĐT1", attempt_number: 1, photo_path: null,
     status: "in_progress", paused: false,
-    self_registered: false, room_id: null, room_name: null, ...over,
+    self_registered: false, room_id: null, room_name: null,
+    preloaded: false, info_disputed: false, offline: false, last_seen_seconds: null, ...over,
   };
 }
 
 const noop = () => {};
 
 describe("SessionTable", () => {
+  it("AD-122: hiện 'mất kết nối' khi máy im lặng, im ngắn thì KHÔNG hiện", () => {
+    // Ngưỡng nằm ở backend (90s) — bảng chỉ hiển thị theo cờ. Kiểm cả hai chiều để
+    // không lặp lại chuyện chỉ báo cũ nhấp nháy khiến người vận hành phải gỡ bỏ.
+    const off = render(<SessionTable
+      rows={[{ kind: "session", s: session({ offline: true, last_seen_seconds: 180 }) }]}
+      onLogout={noop} onAdmit={noop} />);
+    expect(off.container.textContent).toContain("mất kết nối 3 phút");
+
+    const on = render(<SessionTable
+      rows={[{ kind: "session", s: session({ offline: false, last_seen_seconds: 20 }) }]}
+      onLogout={noop} onAdmit={noop} />);
+    expect(on.container.textContent).not.toContain("mất kết nối");
+  });
+
+  it("AD-122: hiện nhãn khi thí sinh báo sai thông tin, không có thì thôi", () => {
+    // Hiện trường 30-07: bấm "Báo giám thị" xong KHÔNG AI THẤY, vì tín hiệu chỉ
+    // phát qua WebSocket mà bộ nghe đã bị gỡ cùng box Thông báo.
+    const rows: DisplayRow[] = [{ kind: "session", s: session({ info_disputed: true }) }];
+    const { container } = render(<SessionTable rows={rows} onLogout={noop} onAdmit={noop} />);
+    expect(container.textContent).toContain("Báo sai thông tin");
+
+    const ok = render(<SessionTable rows={[{ kind: "session", s: session() }]}
+      onLogout={noop} onAdmit={noop} />);
+    expect(ok.container.textContent).not.toContain("Báo sai thông tin");
+  });
+
   it("renders a logged-in session and a pending candidate", () => {
     const rows: DisplayRow[] = [
       { kind: "session", s: session() },

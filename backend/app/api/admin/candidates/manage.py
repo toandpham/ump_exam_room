@@ -300,6 +300,9 @@ async def update_candidate(
                                 "Phòng không thuộc kỳ thi của thí sinh.")
     for field, value in data.items():
         setattr(candidate, field, value)
+    # AD-122: sửa thông tin xong = đã xử lý khiếu nại → tắt nhãn đỏ trên bảng giám
+    # sát. Không bắt ai bấm thêm nút "đã xử lý": việc sửa CHÍNH LÀ hành động xử lý.
+    candidate.info_disputed_at = None
     await db.commit()
     await db.refresh(candidate)
     return await _to_out(db, candidate)

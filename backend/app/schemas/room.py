@@ -67,6 +67,8 @@ class RoomSeat(BaseModel):
     id_type: str = "cccd"          # 'cccd' | 'passport' (AD-58)
     unit: str = ""                 # Đơn vị — helps the proctor verify papers
     birth_date: date | None = None
+    # AD-122: thí sinh báo sai thông tin — giám thị sửa tại chỗ được.
+    info_disputed: bool = False
 
 
 class MyRoomOut(BaseModel):

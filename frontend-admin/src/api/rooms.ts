@@ -22,6 +22,8 @@ export interface RoomSeat {
   id_type?: string;     // 'cccd' | 'passport' (AD-58)
   unit?: string;
   birth_date?: string | null;
+  /** Thí sinh báo thông tin cá nhân bị sai — giám thị sửa tại chỗ (AD-122). */
+  info_disputed?: boolean;
 }
 
 export const roomsApi = {

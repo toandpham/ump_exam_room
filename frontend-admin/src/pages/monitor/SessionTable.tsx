@@ -1,5 +1,6 @@
 import { LogOut, Pause, Play, UserCheck } from "lucide-react";
 import type { RosterCandidate, SessionSummary } from "../../api/monitor";
+import { offlineLabel } from "../../lib/offline";
 import { STATUS_LABEL, type DisplayRow } from "./constants";
 
 /** Bảng thí sinh hợp nhất: dòng đã đăng nhập (có phiên, kèm thao tác) và dòng
@@ -76,6 +77,21 @@ function Row({ stt, s, onLogout, onAdmit, onPause, onResume, hasRunning }: {
         <span className={isAbsent ? "text-slate-400" : ""}>{s.full_name}</span>
         {isAbsent && <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-slate-200 text-slate-500">Vắng</span>}
         {s.paused && <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">tạm dừng</span>}
+        {/* AD-122: thí sinh báo sai thông tin — vào tab Thí sinh sửa, nhãn tự tắt. */}
+        {/* AD-122: máy im lặng >90s. Chỉ hiện khi phiên còn CẦN online (backend
+            đã lọc) — nộp xong tắt máy đi về là bình thường, không báo. */}
+        {s.offline && (
+          <span title="Máy này đã ngừng gọi về máy chủ — kiểm tra mạng/máy của thí sinh"
+            className="ml-2 text-xs px-1.5 py-0.5 rounded bg-slate-700 text-white font-semibold">
+            ⚡ {offlineLabel(s.last_seen_seconds)}
+          </span>
+        )}
+        {s.info_disputed && (
+          <span title="Thí sinh báo thông tin cá nhân bị sai — vào tab Thí sinh sửa lại"
+            className="ml-2 text-xs px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-semibold">
+            ⚠ Báo sai thông tin
+          </span>
+        )}
       </td>
       <td className="px-3 py-2 font-mono text-xs">{s.cccd}</td>
       <td className="px-3 py-2 text-slate-600">{s.room_name || "—"}</td>

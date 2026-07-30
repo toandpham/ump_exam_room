@@ -106,7 +106,14 @@ async def dispute_info(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Candidate reports their displayed info is wrong -> log + alert the proctor
-    so they can fix it in the Thí sinh tab."""
+    so they can fix it in the Thí sinh tab.
+
+    AD-122: cờ được ghi vào HỒ SƠ THÍ SINH, không chỉ phát WebSocket. Bộ nghe WS
+    phía quản trị đã bị gỡ cùng box Thông báo (AD-77) nên tín hiệu cũ rơi vào hư
+    không — giám thị không hề biết có người báo sai (hiện trường 30-07).
+    """
+    candidate.info_disputed_at = datetime.now(timezone.utc)
+    await db.commit()
     await manager.publish(
         "admin", "candidate_info_dispute", exam_id=candidate.exam_id,
         data={"cccd": candidate.cccd, "full_name": candidate.full_name,

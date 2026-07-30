@@ -6,10 +6,10 @@ Carries all 9 required fields from the spec.
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, uuid_pk
@@ -52,6 +52,11 @@ class Candidate(Base, TimestampMixin):
     room_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("exam_rooms.id", ondelete="SET NULL"), index=True
     )
+    # Thí sinh bấm "Báo giám thị" ở màn đối chiếu thông tin. NULL = không có gì.
+    # Cờ này là thứ bảng giám sát/bảng phòng đọc để hiện nhãn đỏ — trước đây tín
+    # hiệu chỉ phát qua WebSocket mà không còn ai nghe nên KHÔNG AI THẤY (30-07).
+    # Tự xoá khi chủ tịch/giám thị sửa thông tin thí sinh.
+    info_disputed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     exam: Mapped["Exam | None"] = relationship(back_populates="candidates")
     room: Mapped["Room | None"] = relationship(back_populates="candidates")

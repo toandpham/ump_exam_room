@@ -43,6 +43,12 @@ class SessionSummary(BaseModel):
     paused: bool = False
     room_id: uuid.UUID | None = None
     room_name: str | None = None
+    # AD-122: thí sinh đã bấm "Báo giám thị" (sai thông tin) và CHƯA được sửa.
+    info_disputed: bool = False
+    # AD-122: máy thí sinh im lặng quá OFFLINE_ALERT_SECONDS (90s) — mất kết nối
+    # THẬT chứ không phải chớp mạng. Chỉ tính khi phiên còn đang cần online.
+    offline: bool = False
+    last_seen_seconds: int | None = None
     # AD-110: máy đã tải xong toàn bộ ảnh đề (cờ Redis do máy thí sinh báo về) —
     # chủ tịch chỉ nên Bắt đầu thi khi mọi máy ready đều True.
     preloaded: bool = False
@@ -58,6 +64,7 @@ class RosterCandidate(BaseModel):
     photo_path: str | None
     self_registered: bool = False
     room_name: str | None = None
+    info_disputed: bool = False
 
 
 class RosterSitting(BaseModel):

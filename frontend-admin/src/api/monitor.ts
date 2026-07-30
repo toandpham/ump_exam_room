@@ -18,6 +18,11 @@ export interface SessionSummary {
   room_name: string | null;
   // AD-110: máy đã tải xong toàn bộ ảnh đề (báo về từ máy thí sinh lúc chờ).
   preloaded: boolean;
+  /** Thí sinh đã bấm "Báo giám thị" (sai thông tin), chưa được sửa. */
+  info_disputed: boolean;
+  /** Máy im lặng >90s = mất kết nối THẬT (chớp mạng ngắn không tính). */
+  offline: boolean;
+  last_seen_seconds: number | null;
 }
 
 export interface RosterCandidate {
@@ -30,6 +35,7 @@ export interface RosterCandidate {
   photo_path: string | null;
   self_registered: boolean;
   room_name: string | null;
+  info_disputed: boolean;
 }
 
 export interface RosterResponse {

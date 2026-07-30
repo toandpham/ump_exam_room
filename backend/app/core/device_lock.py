@@ -18,7 +18,16 @@ from app.core.redis import redis_client
 
 # A device counts as "live" if it has polled within this many seconds. The exam
 # client polls /state every 5s, so 25s tolerates a couple of missed beats.
+# ĐỪNG nới con số này: nó dùng cho việc phát hiện đăng nhập từ thiết bị khác
+# (chống thi hộ) — nới ra là làm yếu chống gian lận.
 LIVE_WINDOW_SECONDS = 25
+
+# Ngưỡng RIÊNG để BÁO ĐỘNG "mất kết nối" cho chủ tịch/giám thị (AD-122). Dài hơn hẳn
+# vì mục đích khác: chỉ báo khi mất THẬT. Chỉ báo cũ (AD-38) dùng chung 25 giây nên
+# máy Win7 khựng một cái là cả bảng nhấp nháy → người vận hành yêu cầu gỡ bỏ. Máy
+# thí sinh gọi về mỗi 5–15 giây, nên 90 giây = bỏ lỡ nhiều nhịp liền.
+OFFLINE_ALERT_SECONDS = 90
+
 _TTL = settings.jwt_expire_hours * 3600
 
 
@@ -48,6 +57,28 @@ def is_live(active: dict | None) -> bool:
     if not active:
         return False
     return (time.time() - active.get("ts", 0)) < LIVE_WINDOW_SECONDS
+
+
+async def get_active_many(candidate_ids: list) -> list[dict | None]:
+    """Đọc nhịp tim của NHIỀU thí sinh trong một cú MGET — bảng giám sát gọi mỗi 8
+    giây cho tới 500 dòng, không thể đọc từng khoá."""
+    if not candidate_ids:
+        return []
+    raws = await redis_client.mget([_key(cid) for cid in candidate_ids])
+    out: list[dict | None] = []
+    for raw in raws:
+        try:
+            out.append(json.loads(raw) if raw else None)
+        except (ValueError, TypeError):
+            out.append(None)
+    return out
+
+
+def seconds_since_seen(active: dict | None) -> int | None:
+    """Bao lâu rồi máy chưa gọi về. None = chưa từng thấy máy nào."""
+    if not active or not active.get("ts"):
+        return None
+    return max(0, int(time.time() - active["ts"]))
 
 
 async def revoke(candidate_id) -> None:
