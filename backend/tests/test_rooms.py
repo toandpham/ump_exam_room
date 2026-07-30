@@ -373,38 +373,66 @@ async def test_import_assigns_rooms_from_excel(client, factory):
     assert any(s["cccd"] == "079200000801" for s in seat1)
 
 
-async def test_giam_thi_add_candidate_to_room(client, factory):
-    """Giám thị thêm 1 thí sinh lẻ vào phòng MÌNH (kể cả kỳ thi đang chạy); không
-    thêm được phòng khác (404). Chủ tịch thêm được mọi phòng (AD-54)."""
+async def test_giam_thi_cannot_add_candidate(client, factory):
+    """AD-124: giám thị KHÔNG còn quyền thêm thí sinh (đảo AD-54, theo yêu cầu vận
+    hành 30-07). Quyền hành động của giám thị chỉ còn Tạm dừng / Tiếp tục. Chủ tịch
+    vẫn thêm được — họ là người chịu trách nhiệm danh sách dự thi."""
     chair, ctok = await factory.admin(role=AdminRole.PROCTOR.value)
     gt, gttok = await factory.admin(role=AdminRole.ROOM_PROCTOR.value)
     exam, sitting, _ = await factory.active_exam([{"text": "Q", "correct": "A"}], owner_id=chair.id)
     mine = await factory.room(exam.id, proctor_id=gt.id, name="P-mine")
-    other = await factory.room(exam.id, name="P-other")
 
     body = {"cccd": "079200000811", "full_name": "Walk In", "birth_date": "2000-01-01",
             "unit": "ĐV", "category": "ĐT1", "attempt_number": 1}
+    # Ngay cả phòng CỦA MÌNH cũng không thêm được nữa.
     r = await client.post(f"/api/admin/rooms/{mine.id}/candidates", json=body, headers=auth(gttok))
-    assert r.status_code == 201, r.text
-    # vào đúng phòng giám thị
-    seats = (await client.get(f"/api/admin/rooms/{mine.id}/seating", headers=auth(gttok))).json()
-    assert any(s["cccd"] == "079200000811" for s in seats)
+    assert r.status_code == 403, r.text
 
-    # giám thị KHÔNG thêm được phòng khác
-    body2 = {**body, "cccd": "079200000812"}
-    assert (await client.post(f"/api/admin/rooms/{other.id}/candidates",
-            json=body2, headers=auth(gttok))).status_code == 404
-    # chủ tịch thêm được phòng khác
-    assert (await client.post(f"/api/admin/rooms/{other.id}/candidates",
-            json=body2, headers=auth(ctok))).status_code == 201
+    # Chủ tịch thì vẫn thêm được.
+    assert (await client.post(f"/api/admin/rooms/{mine.id}/candidates",
+            json=body, headers=auth(ctok))).status_code == 201
 
-    # dọn 2 thí sinh vừa thêm (không qua factory)
+    # dọn thí sinh vừa thêm (không qua factory)
     from sqlalchemy import delete as _del
     from app.database import AsyncSessionLocal
     from app.models import Candidate as _C
     async with AsyncSessionLocal() as s:
-        await s.execute(_del(_C).where(_C.cccd.in_(["079200000811", "079200000812"])))
+        await s.execute(_del(_C).where(_C.cccd == "079200000811"))
         await s.commit()
+
+
+async def test_giam_thi_action_surface_is_pause_resume_only(client, factory):
+    """Chốt PHẠM VI QUYỀN: giám thị chỉ được XEM phòng mình + Tạm dừng/Tiếp tục.
+    Mọi cửa hành động khác của chủ tịch phải trả 403."""
+    chair, _ctok = await factory.admin(role=AdminRole.PROCTOR.value)
+    gt, gttok = await factory.admin(role=AdminRole.ROOM_PROCTOR.value)
+    exam, sitting, _ = await factory.active_exam([{"text": "Q", "correct": "A"}], owner_id=chair.id)
+    room = await factory.room(exam.id, proctor_id=gt.id, name="P-quyen")
+    h = auth(gttok)
+
+    # ĐƯỢC XEM
+    assert (await client.get("/api/admin/my-rooms", headers=h)).status_code == 200
+    assert (await client.get(f"/api/admin/rooms/{room.id}/seating", headers=h)).status_code == 200
+    assert (await client.get(f"/api/admin/sittings/{sitting.id}/sessions", headers=h)).status_code == 200
+
+    # KHÔNG được điều phối kỳ thi / buổi thi
+    for method, url in [
+        ("post", f"/api/admin/sittings/{sitting.id}/start"),
+        ("post", f"/api/admin/sittings/{sitting.id}/end"),
+        ("post", f"/api/admin/sittings/{sitting.id}/extend"),
+        ("post", f"/api/admin/sittings/{sitting.id}/pause-all"),
+        ("post", f"/api/admin/sittings/{sitting.id}/resume-all"),
+        ("get", f"/api/admin/sittings/{sitting.id}/roster"),
+        ("get", f"/api/admin/sittings/{sitting.id}/report"),
+        ("post", f"/api/admin/rooms/{room.id}/candidates"),
+        ("post", f"/api/admin/exams/{exam.id}/rooms"),
+        ("post", "/api/admin/exams"),
+        ("get", f"/api/admin/candidates?exam_id={exam.id}"),
+        ("post", "/api/admin/candidates"),
+        ("post", "/api/admin/candidates/emergency-add"),
+    ]:
+        r = await getattr(client, method)(url, headers=h, **({"json": {}} if method == "post" else {}))
+        assert r.status_code == 403, f"{method.upper()} {url} → {r.status_code} (phải 403)"
 
 
 async def test_room_proctor_pause_only_own_room(client, factory):

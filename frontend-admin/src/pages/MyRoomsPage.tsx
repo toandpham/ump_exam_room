@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { DoorOpen, UserPlus, Pause, Play } from "lucide-react";
+import { DoorOpen, Pause, Play } from "lucide-react";
 import { roomsApi } from "../api/rooms";
 import type { MyRoom } from "../api/types";
 import { sittingsApi } from "../api/sittings";
 import { monitorApi, type SessionSummary } from "../api/monitor";
 import ExamCountdown from "../components/ExamCountdown";
 import { STATUS_LABEL } from "./monitor/constants";
-import AddCandidateModal from "./rooms/AddCandidateModal";
 import { offlineLabel } from "../lib/offline";
 
 type RoomFilter = "all" | "logged_in" | "not_logged_in" | "in_progress" | "submitted";
@@ -55,7 +54,6 @@ function RoomBlock({ room }: { room: MyRoom }) {
   const pause = useMutation({ mutationFn: (id: string) => monitorApi.pauseSession(id), onSuccess: invalidateSessions });
   const resume = useMutation({ mutationFn: (id: string) => monitorApi.resumeSession(id), onSuccess: invalidateSessions });
 
-  const [addOpen, setAddOpen] = useState(false);
   const [filter, setFilter] = useState<RoomFilter>("all");
 
   // Merge the room roster with live session status by candidate.
@@ -105,11 +103,9 @@ function RoomBlock({ room }: { room: MyRoom }) {
           <span className="text-xs text-slate-500">{room.exam_name} · {room.candidate_count} thí sinh</span>
         </div>
         <div className="flex items-center gap-2">
+          {/* AD-124: nút "Thêm thí sinh" đã GỠ — giám thị chỉ Tạm dừng / Tiếp tục
+              bài thi; danh sách dự thi là trách nhiệm của chủ tịch. */}
           <ExamCountdown endTime={room.cohort_end_time} serverTime={room.server_time} />
-          <button onClick={() => setAddOpen(true)}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700">
-            <UserPlus size={16} /> Thêm thí sinh
-          </button>
         </div>
       </div>
 
@@ -131,14 +127,6 @@ function RoomBlock({ room }: { room: MyRoom }) {
         })}
       </div>
 
-      {addOpen && (
-        <AddCandidateModal roomId={room.room_id} roomName={room.room_name}
-          onClose={() => setAddOpen(false)}
-          onAdded={() => {
-            qc.invalidateQueries({ queryKey: ["room-seating", room.room_id] });
-            qc.invalidateQueries({ queryKey: ["my-rooms"] });
-          }} />
-      )}
 
       {seatsLoading ? (
         <p className="text-sm text-slate-400">Đang tải…</p>

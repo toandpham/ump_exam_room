@@ -261,10 +261,14 @@ async def add_room_candidate(
     body: CandidateCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    admin: Admin = Depends(_require_proctor_or_room),
+    admin: Admin = Depends(_require_proctor),
 ) -> RoomSeat:
-    """Giám thị (phòng mình) hoặc chủ tịch thêm 1 thí sinh lẻ THẲNG vào phòng — kể
-    cả khi kỳ thi đang chạy (walk-in). Khác import hàng loạt của chủ tịch (AD-54)."""
+    """CHỦ TỊCH thêm 1 thí sinh lẻ THẲNG vào phòng — kể cả khi kỳ thi đang chạy
+    (walk-in). Khác import hàng loạt ở tab Thí sinh.
+
+    AD-124 (đảo AD-54): GIÁM THỊ KHÔNG còn quyền này (yêu cầu vận hành 30-07).
+    Quyền hành động của giám thị chỉ còn Tạm dừng / Tiếp tục bài thi của thí sinh
+    trong phòng mình; danh sách dự thi là trách nhiệm của chủ tịch."""
     room = await _room_for_seating(db, room_id, admin)
     if await db.scalar(select(Candidate.id).where(Candidate.cccd == body.cccd)):
         raise HTTPException(status.HTTP_409_CONFLICT, "CCCD đã tồn tại")

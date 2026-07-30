@@ -37,12 +37,6 @@ export const roomsApi = {
 
   roomSeating: async (roomId: string): Promise<RoomSeat[]> =>
     (await api.get(`/admin/rooms/${roomId}/seating`)).data,
-  // Giám thị (hoặc chủ tịch) thêm 1 thí sinh lẻ vào phòng (AD-54).
-  addRoomCandidate: async (roomId: string, body: {
-    cccd: string; full_name: string; birth_date: string; unit: string;
-    category: string; attempt_number: number; graduation_year?: number | null; major?: string | null;
-  }): Promise<RoomSeat> =>
-    (await api.post(`/admin/rooms/${roomId}/candidates`, body)).data,
   seatingXlsx: async (examId: string) => {
     const res = await api.get(`/admin/exams/${examId}/seating.xlsx`, { responseType: "blob" });
     triggerDownload(res.data, `seating_${examId}.xlsx`);
