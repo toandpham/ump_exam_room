@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, FlaskConical, Search, X } from "lucide-react";
 import { LAB_GROUPS, LAB_NOTES, LAB_SOURCE, filterGroups } from "../lib/labReference";
+import { sciText } from "../lib/sciText";
 
 interface Props {
   open: boolean;
@@ -92,9 +93,9 @@ export default function LabReference({ open, onClose }: Props) {
                     <tbody>
                       {g.rows.map((r, i) => (
                         <tr key={`${r.test}-${r.unit}-${i}`} className="border-t border-slate-100 align-top">
-                          <td className="px-2 py-1.5 font-medium text-slate-800">{r.test}</td>
-                          <td className="px-2 py-1.5 text-slate-500 whitespace-pre-line">{r.unit}</td>
-                          <td className="px-2 py-1.5 text-slate-700 whitespace-pre-line">{r.ref}</td>
+                          <td className="px-2 py-1.5 font-medium text-slate-800">{sciText(r.test)}</td>
+                          <td className="px-2 py-1.5 text-slate-500 whitespace-pre-line">{sciText(r.unit)}</td>
+                          <td className="px-2 py-1.5 text-slate-700 whitespace-pre-line">{sciText(r.ref)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -111,7 +112,7 @@ export default function LabReference({ open, onClose }: Props) {
             <p className="font-semibold text-slate-600">Chú thích</p>
             <ul className="list-disc pl-4 space-y-1">
               {LAB_NOTES.map((n, i) => (
-                <li key={i}>{n}</li>
+                <li key={i}>{sciText(n)}</li>
               ))}
             </ul>
             <p className="pt-1 italic">{LAB_SOURCE}</p>

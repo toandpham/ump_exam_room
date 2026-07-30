@@ -47,6 +47,17 @@ describe("LabReference panel", () => {
     expect(screen.getByText(/Không tìm thấy/i)).toBeTruthy();
   });
 
+  it("KHÔNG còn ký tự Unicode số mũ nào trên bảng (Win7 hiện thành ô vuông)", () => {
+    // Lỗi hiện trường 30-07: đơn vị `10⁹/L`, `Ca²⁺`, `HCO₃⁻` ra ô vuông vì font
+    // Windows 7 thiếu glyph khối U+2070. Phải render bằng <sup>/<sub> + chữ số ASCII.
+    const { container } = render(<LabReference open onClose={() => {}} />);
+    expect(container.textContent).not.toMatch(/[⁰-₟]/);
+    expect(container.querySelectorAll("sup").length).toBeGreaterThan(0);
+    // Đơn vị bạch cầu phải đọc được thành "10" + mũ "9" + "/L".
+    const sups = Array.from(container.querySelectorAll("sup")).map((s) => s.textContent);
+    expect(sups).toContain("9");
+  });
+
   it("gọi onClose khi bấm nút đóng", () => {
     let closed = false;
     render(<LabReference open onClose={() => (closed = true)} />);

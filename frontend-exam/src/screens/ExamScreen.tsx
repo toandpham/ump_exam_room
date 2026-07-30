@@ -78,9 +78,15 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
       {/* AD-88: mất đồng bộ kéo dài = bài làm CHỈ nằm trên máy này — máy hỏng là mất.
           Phải la to để thí sinh/giám thị xử lý từ sớm, không phải cuối giờ mới biết. */}
       {saveStatus === "disconnected" && (
-        <div className="bg-red-600 text-white text-center text-sm font-semibold px-4 py-2">
-          ⚠️ MẤT KẾT NỐI MÁY CHỦ — bài làm chưa được đồng bộ, KHÔNG tự ý đổi máy.
-          Cứ làm tiếp và <u>giơ tay báo giám thị</u> kiểm tra mạng máy này.
+        <div className="bg-red-600 text-white px-4 py-3 flex items-center gap-3 border-b-4 border-red-800">
+          <WifiOff size={34} className="shrink-0" />
+          <div className="leading-snug">
+            <p className="text-xl font-extrabold tracking-wide">MẤT KẾT NỐI MÁY CHỦ</p>
+            <p className="text-base font-semibold">
+              Bài làm chưa được lưu lên máy chủ. <u>GIƠ TAY BÁO GIÁM THỊ NGAY</u> —
+              cứ làm tiếp, KHÔNG tắt máy, KHÔNG tự ý đổi máy.
+            </p>
+          </div>
         </div>
       )}
       <header className="bg-white border-b px-4 py-2 flex items-center justify-between">
