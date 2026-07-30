@@ -17,17 +17,47 @@ export interface ExamWs {
   subscribe: (handler: (e: WsEvent) => void) => () => void;
 }
 
-/** A 4xx means the server rejected the answer for good (e.g. "Đã hết giờ" after
- * end_time, or pause) — retrying is pointless and would pin "Mất kết nối"
- * forever. Only network/5xx errors are worth retrying. */
-function isPermanentError(err: unknown): boolean {
-  return (
-    axios.isAxiosError(err) &&
-    err.response != null &&
-    err.response.status >= 400 &&
-    err.response.status < 500
-  );
+function httpStatus(err: unknown): number | null {
+  return axios.isAxiosError(err) && err.response != null ? err.response.status : null;
 }
+
+/** Máy chủ trả lời được nhưng từ chối (4xx) — khác hẳn mạng hỏng/5xx (đáng thử lại). */
+function isClientError(err: unknown): boolean {
+  const s = httpStatus(err);
+  return s != null && s >= 400 && s < 500;
+}
+
+/** Phiên thi KHÔNG CÒN tồn tại với máy chủ (token hết hiệu lực, phiên đã bị xoá).
+ * Giữ hàng chờ lúc này là vô nghĩa — server sẽ không bao giờ nhận. */
+function isSessionGone(err: unknown): boolean {
+  const s = httpStatus(err);
+  return s === 401 || s === 403 || s === 404;
+}
+
+/** R3: 409 là trạng thái TẠM THỜI — "Đã hết giờ" hoặc "đang tạm dừng". PHẢI GIỮ
+ * hàng chờ: được cộng giờ / cho tiếp tục thì nhịp sau đẩy lên. Trước đây code gộp
+ * mọi 4xx thành "từ chối vĩnh viễn" rồi VỨT hàng chờ và còn ghi "Đã lưu" — mất đáp
+ * án cuối trước lúc tạm dừng, đúng vào thí sinh vừa gặp sự cố. */
+function isTemporaryConflict(err: unknown): boolean {
+  return httpStatus(err) === 409;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Chưa đồng bộ đủ thì KHÔNG được nộp (R2) — thà bắt bấm lại còn hơn chấm sai. */
+const ERR_NOT_SYNCED =
+  "Còn đáp án chưa lưu được lên máy chủ nên chưa thể nộp bài (mạng máy này đang có " +
+  "vấn đề). Bài làm của bạn VẪN CÒN trên máy này — hãy bấm \"Nộp bài\" lại; nếu vẫn " +
+  "lỗi, giơ tay báo giám thị. KHÔNG tắt máy.";
+
+const ERR_REJECTED =
+  "Máy chủ từ chối lệnh nộp bài (có thể bài thi đang tạm dừng, hoặc chưa tới giờ làm " +
+  "bài). Bài làm của bạn VẪN CÒN trên máy này — hãy giơ tay báo giám thị. KHÔNG tắt máy.";
+
+const ERR_NETWORK =
+  "Không gửi được bài lên máy chủ (mạng có vấn đề). Bài làm của bạn VẪN CÒN " +
+  "trên máy này — hãy bấm \"Nộp bài\" lại; nếu vẫn lỗi, giơ tay báo giám thị. " +
+  "KHÔNG tắt máy.";
 
 /** Owns the live exam-session state: answers + autosave, the server-anchored
  * countdown, pause/time-up flags, WS end-exam handling, anti-cheat tab counting
@@ -48,6 +78,9 @@ export function useExamSession(
   const [paused, setPaused] = useState(false);
   // Lỗi khi gửi bài lên server (đã thử lại vẫn hỏng) — hiện đỏ để thí sinh bấm lại.
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // R1: đang gửi bài lên server. Trước đây hộp thoại xác nhận đóng lại ngay và
+  // KHÔNG có phản hồi nào → thí sinh không biết máy đang làm gì, dễ tưởng đã xong.
+  const [submitting, setSubmitting] = useState(false);
   // Đáp án "bẩn" chờ đẩy lên server theo LÔ (AD-69) — gộp để giảm số request.
   const dirtyRef = useRef<Record<string, string | null>>({});
   const submittedRef = useRef(false);
@@ -156,23 +189,39 @@ export function useExamSession(
     }, 2500);
   }
 
-  async function flushBatch() {
+  /** Đẩy lô đáp án đang chờ lên server.
+   *
+   * TRẢ VỀ `true` khi hàng chờ đã SẠCH (server nhận hết, hoặc phiên không còn tồn
+   * tại nên giữ lại vô nghĩa). Giá trị này là điều kiện để được nộp bài (R2): trước
+   * đây hàm nuốt mọi lỗi và không trả về gì, nên `doSubmit` cứ nộp một bài THIẾU câu
+   * rồi xoá luôn bài trên máy — điểm sai mà không thí sinh, giám thị hay báo cáo nào
+   * phát hiện được. */
+  async function flushBatch(): Promise<boolean> {
     const snapshot = { ...dirtyRef.current };
     const keys = Object.keys(snapshot);
-    if (keys.length === 0) return;
+    if (keys.length === 0) return true;
     try {
       await examApi.answersBulk(keys.map((qid) => ({ question_id: qid, selected_option: snapshot[qid] })));
       failCountRef.current = 0;   // đồng bộ OK → reset đếm lỗi
       // Chỉ xoá khoá nào CHƯA bị đổi giữa chừng (đổi rồi → để lô sau đẩy).
       for (const qid of keys) if (dirtyRef.current[qid] === snapshot[qid]) delete dirtyRef.current[qid];
-      if (Object.keys(dirtyRef.current).length === 0) setSaveStatus("saved");
+      const clean = Object.keys(dirtyRef.current).length === 0;
+      setSaveStatus(clean ? "saved" : "saving");
+      return clean;
     } catch (err) {
-      // 4xx (hết giờ/tạm dừng) → bỏ (server từ chối vĩnh viễn); mạng/5xx → giữ, thử lại lô sau.
-      if (isPermanentError(err)) { dirtyRef.current = {}; failCountRef.current = 0; setSaveStatus("saved"); return; }
+      if (isSessionGone(err)) {
+        dirtyRef.current = {}; failCountRef.current = 0; setSaveStatus("saved"); return true;
+      }
+      if (isTemporaryConflict(err)) {
+        // R3: hết giờ / tạm dừng → GIỮ hàng chờ, và nói thật là chưa lưu xong.
+        // Không đếm là lỗi mạng (đây không phải lỗi mạng) nên không báo đỏ oan.
+        failCountRef.current = 0; setSaveStatus("saving"); return false;
+      }
       // Đáp án ĐÃ an toàn ở localStorage. Chỉ hiện "mất kết nối" sau vài lần đồng bộ
       // hỏng liên tiếp (debounce) — tránh nhấp nháy gây hoang mang lúc cao điểm.
       failCountRef.current += 1;
       if (failCountRef.current >= 2) setSaveStatus("disconnected");
+      return false;
     }
   }
 
@@ -213,37 +262,74 @@ export function useExamSession(
   // đã nộp trong khi server vẫn thấy "đang làm", mà bấm nộp lại cũng không được
   // (submittedRef đã khoá). Nay: thử lại 3 lần, thất bại thì MỞ KHOÁ + báo đỏ để
   // thí sinh bấm lại / gọi giám thị, và KHÔNG xoá bài làm trên máy.
-  async function doSubmit(_auto: boolean) {
+  /** Xoá dấu vết cục bộ + chuyển màn kết quả. CHỈ được gọi khi đã CHẮC CHẮN server
+   * đã chốt phiên — xoá sớm là phá luôn bản sao cứu hộ duy nhất của bài làm. */
+  function finishLocally() {
+    localStorage.removeItem(ansKeyRef.current);
+    localStorage.removeItem(flagKeyRef.current);
+    onSubmitted();
+  }
+
+  /** Server đã thực sự chốt phiên chưa? Một mã 4xx từ /submit KHÔNG đủ để kết luận:
+   * nó có thể là "chưa tới giờ bắt đầu" hay "đang tạm dừng". Tin nhầm là xoá bài trên
+   * máy rồi đẩy thí sinh sang màn kết quả trống. */
+  async function serverHasFinalised(): Promise<boolean> {
+    try {
+      const st = await examApi.state();
+      return st.status === "submitted" || st.status === "timeout";
+    } catch {
+      return false;   // không xác minh được → coi như CHƯA chốt (an toàn)
+    }
+  }
+
+  async function doSubmit(auto: boolean) {
     if (submittedRef.current) return;
     submittedRef.current = true;
     setSubmitError(null);
-    await flushBatch();   // đẩy nốt đáp án còn lại TRƯỚC khi nộp (server chấm theo DB)
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        await examApi.submit();
-        localStorage.removeItem(ansKey);
-        localStorage.removeItem(flagKey);
-        onSubmitted();
-        return;
-      } catch (err) {
-        // 4xx = server đã chốt phiên này rồi (đã nộp / hết giờ tự nộp) → coi như xong.
-        if (isPermanentError(err)) {
-          localStorage.removeItem(ansKey);
-          localStorage.removeItem(flagKey);
-          onSubmitted();
-          return;
-        }
-        if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+    setSubmitting(true);
+    try {
+      // 1. Đáp án phải nằm trên SERVER trước khi nộp — server chấm theo CSDL của nó,
+      //    nên nộp lúc hàng chờ chưa sạch là tự nguyện bỏ những câu đó (R2).
+      //    Nộp TỰ ĐỘNG (lệnh Đóng buổi qua WS) thì KHÔNG chặn: server đã chốt phiên
+      //    rồi, chặn ở đây chỉ làm thí sinh kẹt với một lỗi vô nghĩa.
+      let clean = await flushBatch();
+      for (let i = 0; !clean && !auto && i < 2; i++) {
+        await sleep(1000 * (i + 1));
+        clean = await flushBatch();
       }
+      if (!clean && !auto) {
+        // Hàng chờ có thể tắc chỉ vì server ĐÃ chốt phiên (giám thị vừa Đóng buổi →
+        // /answers/bulk trả 409 mãi). Báo lỗi lúc đó là oan: bài đã an toàn, chỉ cần
+        // sang màn kết quả.
+        if (await serverHasFinalised()) { finishLocally(); return; }
+        submittedRef.current = false;   // mở khoá để bấm lại
+        setSubmitError(ERR_NOT_SYNCED);
+        return;
+      }
+
+      // 2. Nộp. Mạng/5xx → thử lại; 4xx → hỏi lại server đã chốt phiên chưa.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await examApi.submit();
+          finishLocally();
+          return;
+        } catch (err) {
+          if (isClientError(err)) {
+            if (await serverHasFinalised()) { finishLocally(); return; }
+            submittedRef.current = false;
+            setSubmitError(ERR_REJECTED);
+            return;
+          }
+          if (attempt < 2) await sleep(1000 * (attempt + 1));
+        }
+      }
+      submittedRef.current = false;   // mở khoá để bấm lại được
+      setSubmitError(ERR_NETWORK);
+    } finally {
+      setSubmitting(false);
     }
-    submittedRef.current = false;   // mở khoá để bấm lại được
-    setSubmitError(
-      "Không gửi được bài lên máy chủ (mạng có vấn đề). Bài làm của bạn VẪN CÒN " +
-      "trên máy này — hãy bấm \"Nộp bài\" lại; nếu vẫn lỗi, giơ tay báo giám thị. " +
-      "KHÔNG tắt máy.",
-    );
   }
 
   return { answers, selectOption, flags, toggleFlag, saveStatus, secondsLeft, paused, timeUp,
-           doSubmit, tabCount, submitError, clearSubmitError: () => setSubmitError(null) };
+           doSubmit, submitting, tabCount, submitError, clearSubmitError: () => setSubmitError(null) };
 }

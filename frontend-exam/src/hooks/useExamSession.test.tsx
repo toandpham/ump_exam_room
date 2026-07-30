@@ -30,8 +30,9 @@ const data = (timeLeft: number): QuestionsResponse => ({
 
 beforeEach(() => {
   localStorage.clear();
-  answer.mockClear(); answersBulk.mockClear(); submit.mockClear();
+  answer.mockClear(); answersBulk.mockClear(); submit.mockClear(); state.mockClear();
   answersBulk.mockResolvedValue({ saved: 1 });
+  state.mockResolvedValue({ paused: false, time_remaining_seconds: 60, status: "in_progress" });
 });
 
 describe("useExamSession (AD-69 batch save)", () => {
@@ -59,13 +60,15 @@ describe("useExamSession (AD-69 batch save)", () => {
     expect(submit).toHaveBeenCalledOnce();
   });
 
-  it("drops the batch on HTTP 4xx (no permanent 'Mất kết nối')", async () => {
-    answersBulk.mockRejectedValueOnce({ isAxiosError: true, response: { status: 409 } });
+  it("bỏ hàng chờ khi phiên KHÔNG CÒN ở server (404) — khỏi kẹt 'Mất kết nối'", async () => {
+    // Chỉ 401/403/404 mới là "server sẽ không bao giờ nhận" → bỏ hàng chờ là đúng.
+    // 409 thì KHÔNG (xem test R3 bên dưới) — đó là trạng thái tạm thời.
+    answersBulk.mockRejectedValueOnce({ isAxiosError: true, response: { status: 404 } });
     const d = data(60);
     const { result } = renderHook(() => useExamSession("s1", d, () => {}, ws));
     act(() => result.current.selectOption("q1", "A"));
     await act(async () => { await result.current.doSubmit(true); });
-    expect(result.current.saveStatus).toBe("saved");   // 409 = từ chối vĩnh viễn → bỏ
+    expect(result.current.saveStatus).toBe("saved");
   });
 
   it("does NOT flash 'disconnected' on a single sync blip (debounced; data safe locally)", async () => {
@@ -168,14 +171,115 @@ describe("useExamSession (AD-69 batch save)", () => {
     }
   });
 
-  it("AD-90: server trả 4xx khi nộp = phiên đã chốt → coi như nộp xong", async () => {
+  it("AD-90: server trả 4xx khi nộp mà phiên ĐÃ chốt thật → coi như nộp xong", async () => {
     submit.mockRejectedValueOnce({ isAxiosError: true, response: { status: 409 } });
+    // R2: 4xx một mình không đủ kết luận "đã nộp" — phải hỏi lại /state.
+    state.mockResolvedValue({ paused: false, time_remaining_seconds: 0, status: "submitted" });
     const onSubmitted = vi.fn();
     const d = data(600);   // GIỮ NGUYÊN object giữa các lần render (đổi = lặp vô hạn)
     const { result } = renderHook(() => useExamSession("s1", d, onSubmitted, ws));
     await act(async () => { await result.current.doSubmit(true); });
     expect(onSubmitted).toHaveBeenCalledOnce();
     expect(result.current.submitError).toBeNull();
+    submit.mockReset(); submit.mockResolvedValue({});
+  });
+
+  // ── Gói 1: chặn nộp bài thiếu đáp án (R2) + giữ hàng chờ khi 409 (R3) ──────
+  // Đây là hai cách hỏng IM LẶNG duy nhất còn lại trên đường nộp bài: chúng cho ra
+  // điểm sai mà không để lại triệu chứng nào cho thí sinh, giám thị hay báo cáo.
+
+  it("R2: còn đáp án chưa lên được máy chủ → KHÔNG nộp, báo lỗi, giữ bài trên máy", async () => {
+    vi.useFakeTimers();
+    try {
+      // Mạng chập chờn: mọi cú đẩy đáp án đều hỏng → hàng chờ không bao giờ sạch.
+      answersBulk.mockRejectedValue({ isAxiosError: true, response: undefined });
+      const onSubmitted = vi.fn();
+      const d = data(600);
+      const { result } = renderHook(() => useExamSession("s1", d, onSubmitted, ws));
+      act(() => result.current.selectOption("q1", "A"));
+      await act(async () => {
+        const p = result.current.doSubmit(false);
+        await vi.advanceTimersByTimeAsync(8000);   // đủ 2 nhịp chờ giữa các lần đẩy lại
+        await p;
+      });
+      // Cốt lõi: KHÔNG được gửi lệnh nộp khi server chưa có đủ đáp án.
+      expect(submit).not.toHaveBeenCalled();
+      expect(onSubmitted).not.toHaveBeenCalled();
+      expect(result.current.submitError).toContain("chưa lưu được lên máy chủ");
+      expect(localStorage.getItem("answers_s1")).not.toBeNull();   // bài vẫn còn
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("R3: 409 (hết giờ/tạm dừng) KHÔNG làm mất đáp án trong hàng chờ", async () => {
+    vi.useFakeTimers();
+    try {
+      answersBulk.mockRejectedValueOnce({ isAxiosError: true, response: { status: 409 } });
+      const d = data(600);
+      const { result } = renderHook(() => useExamSession("s1", d, () => {}, ws));
+      act(() => result.current.selectOption("q1", "A"));
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });   // debounce → 409
+      expect(answersBulk).toHaveBeenCalledTimes(1);
+      // Hàng chờ CHƯA sạch thì chỉ báo phải nói thật, không được ghi "Đã lưu".
+      expect(result.current.saveStatus).toBe("saving");
+      // Nhịp kế tiếp phải đẩy LẠI đúng đáp án đó (sau khi được tiếp tục/cộng giờ).
+      await act(async () => { await vi.advanceTimersByTimeAsync(11000); });
+      expect(answersBulk).toHaveBeenCalledTimes(2);
+      expect(answersBulk).toHaveBeenLastCalledWith([{ question_id: "q1", selected_option: "A" }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("R2: hàng chờ tắc VÌ server đã chốt phiên → sang màn kết quả, không báo lỗi oan", async () => {
+    vi.useFakeTimers();
+    try {
+      // Giám thị vừa Đóng buổi: /answers/bulk trả 409 mãi vì phiên không còn
+      // in_progress. Chặn nộp lúc này là bắt thí sinh xem một lỗi vô nghĩa.
+      answersBulk.mockRejectedValue({ isAxiosError: true, response: { status: 409 } });
+      state.mockResolvedValue({ paused: false, time_remaining_seconds: 0, status: "submitted" });
+      const onSubmitted = vi.fn();
+      const d = data(600);
+      const { result } = renderHook(() => useExamSession("s1", d, onSubmitted, ws));
+      act(() => result.current.selectOption("q1", "A"));
+      await act(async () => {
+        const p = result.current.doSubmit(false);
+        await vi.advanceTimersByTimeAsync(8000);
+        await p;
+      });
+      expect(onSubmitted).toHaveBeenCalledOnce();
+      expect(result.current.submitError).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("R2: nộp trả 4xx mà server nói phiên CHƯA chốt → báo lỗi, KHÔNG xoá bài", async () => {
+    // 409 của /submit có thể là "chưa tới giờ bắt đầu" — không phải "đã nộp rồi".
+    // Tin nhầm là xoá bài trên máy rồi đẩy thí sinh sang màn kết quả trống.
+    submit.mockRejectedValue({ isAxiosError: true, response: { status: 409 } });
+    state.mockResolvedValue({ paused: false, time_remaining_seconds: 600, status: "in_progress" });
+    const onSubmitted = vi.fn();
+    const d = data(600);
+    const { result } = renderHook(() => useExamSession("s1", d, onSubmitted, ws));
+    act(() => result.current.selectOption("q1", "A"));
+    await act(async () => { await result.current.doSubmit(false); });
+    expect(onSubmitted).not.toHaveBeenCalled();
+    expect(localStorage.getItem("answers_s1")).not.toBeNull();
+    expect(result.current.submitError).toBeTruthy();
+    submit.mockReset(); submit.mockResolvedValue({});
+  });
+
+  it("R1: đang gửi bài thì hook báo `submitting` (để giao diện khoá nút + hiện tiến trình)", async () => {
+    let release: () => void = () => {};
+    submit.mockImplementation(() => new Promise<void>((r) => { release = () => r(); }));
+    const d = data(600);
+    const { result } = renderHook(() => useExamSession("s1", d, () => {}, ws));
+    await act(async () => { void result.current.doSubmit(false); });
+    expect(result.current.submitting).toBe(true);
+    await act(async () => { release(); });
+    expect(result.current.submitting).toBe(false);
     submit.mockReset(); submit.mockResolvedValue({});
   });
 

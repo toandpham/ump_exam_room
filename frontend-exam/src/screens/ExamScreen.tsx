@@ -25,7 +25,7 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
   // Nộp/hết giờ → xoá giấy nháp của phiên rồi chuyển sang màn kết quả.
   const handleSubmitted = () => { clearNotes(sessionId); onSubmitted(); };
   const { answers, selectOption, flags, toggleFlag, saveStatus, secondsLeft, paused, timeUp,
-          doSubmit, tabCount, submitError, clearSubmitError } =
+          doSubmit, submitting, tabCount, submitError, clearSubmitError } =
     useExamSession(sessionId, data, handleSubmitted, ws);
 
   // AD-90/AD-110: CHEN HÀNG vài câu KẾ TIẾP lên trước hàng đợi nền. Toàn bộ đề đã
@@ -196,6 +196,17 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
           footer={<>Còn lại: <span className="font-mono">{secondsLeft != null ? `${Math.floor(secondsLeft / 60).toString().padStart(2, "0")}:${(secondsLeft % 60).toString().padStart(2, "0")}` : "—"}</span></>}>
           Giám thị đã tạm dừng bài thi của bạn. Đồng hồ đã ngừng — thời gian làm bài được giữ nguyên.
           Vui lòng chờ đến khi giám thị cho tiếp tục.
+        </Overlay>
+      )}
+
+      {/* R1: đang gửi bài lên máy chủ. Trước đây hộp thoại xác nhận đóng lại NGAY và
+          không có phản hồi nào — nếu cú nộp treo thì thí sinh ngồi trước màn hình bài
+          thi, tưởng mình đã nộp xong. Lớp phủ này cũng chặn bấm nộp lần hai. */}
+      {submitting && (
+        <Overlay icon={<Hourglass size={32} className="text-blue-600" />} iconBg="bg-blue-100"
+          title="Đang gửi bài lên máy chủ…">
+          Vui lòng <b>giữ nguyên màn hình</b> và KHÔNG tắt máy. Nếu mạng có vấn đề, máy sẽ
+          tự thử lại và báo cho bạn biết.
         </Overlay>
       )}
 

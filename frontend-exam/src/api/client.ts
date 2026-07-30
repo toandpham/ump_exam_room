@@ -23,7 +23,15 @@ function getDeviceId(): string {
 
 const DEVICE_ID = getDeviceId();
 
-export const api = axios.create({ baseURL: "/api" });
+/** R1: PHẢI có timeout. Axios mặc định là 0 = chờ vô hạn — một kết nối treo (máy
+ * Win7 card mạng chập, 400 máy dồn lúc hết giờ) khiến cú NỘP BÀI không bao giờ kết
+ * thúc: không lỗi, không thử lại, `submittedRef` khoá luôn → thí sinh tưởng đã nộp,
+ * bấm lại không được, và không rời phòng thi được. Có timeout thì cú treo thành lỗi
+ * mạng, kích hoạt phần thử-lại + báo đỏ vốn đã có trong useExamSession.
+ * 20s: đủ dài cho máy yếu tải đề, đủ ngắn để không ngồi chờ vô nghĩa. */
+const REQUEST_TIMEOUT_MS = 20_000;
+
+export const api = axios.create({ baseURL: "/api", timeout: REQUEST_TIMEOUT_MS });
 
 api.interceptors.request.use((config) => {
   const token = useStore.getState().token;
