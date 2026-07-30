@@ -64,14 +64,14 @@ function QuestionCard({
                   loading="lazy" decoding="async" title="Bấm để phóng to"
                   className="max-h-72 rounded border cursor-zoom-in hover:opacity-90 my-3" />
               ) : (
-                <p key={i} className="text-slate-900 text-lg leading-relaxed font-medium whitespace-pre-wrap">{b.text}</p>
+                <p key={i} className="text-slate-900 text-xl leading-relaxed font-medium whitespace-pre-wrap">{b.text}</p>
               )
             )}
           </div>
         ) : (
           <>
-            {/* Câu hỏi: ưu tiên — chữ to, rõ (AD-69) */}
-            <p className="text-slate-900 text-lg leading-relaxed font-medium mb-4 whitespace-pre-wrap">{q.text}</p>
+            {/* Câu hỏi: ưu tiên — chữ to, rõ (AD-69; nâng cỡ AD-125) */}
+            <p className="text-slate-900 text-xl leading-relaxed font-medium mb-4 whitespace-pre-wrap">{q.text}</p>
             {q.images && q.images.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-5">
                 {q.images.map((src, i) => (
@@ -85,8 +85,10 @@ function QuestionCard({
           </>
         )}
 
-        {/* Đáp án: nhỏ lại để nhường chỗ cho câu hỏi (AD-69) */}
-        <div className="space-y-1.5">
+        {/* Đáp án (AD-125): trước đây cố ý thu nhỏ còn 14px để "nhường chỗ cho câu
+            hỏi" — thực địa 30-07 báo chữ nhỏ khó đọc. Nay 16px, vẫn nhỏ hơn câu hỏi
+            (20px) nên thứ bậc vẫn rõ, và ô bấm rộng hơn cho dễ chọn. */}
+        <div className="space-y-2">
           {q.options.map((o, i) => {
             const selected = answers[q.id] === o.id;
             // Per QTI: the displayed label is POSITIONAL (A,B,C,D top to bottom).
@@ -95,8 +97,8 @@ function QuestionCard({
             const label = String.fromCharCode(65 + i);
             return (
               <button key={o.id} onClick={() => onSelect(q.id, o.id)}
-                className={`w-full text-left flex items-start gap-2.5 border rounded-lg px-3 py-2 text-sm transition ${selected ? "border-blue-600 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`}>
-                <span className={`w-5 h-5 mt-0.5 shrink-0 rounded-full flex items-center justify-center text-xs font-semibold ${selected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{label}</span>
+                className={`w-full text-left flex items-start gap-3 border rounded-lg px-3.5 py-2.5 text-base leading-relaxed transition ${selected ? "border-blue-600 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`}>
+                <span className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-sm font-bold ${selected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{label}</span>
                 <span className="flex-1 whitespace-pre-wrap">{o.text}</span>
                 {o.images && o.images.length > 0 && (
                   <span className="flex flex-wrap gap-1 shrink-0">
