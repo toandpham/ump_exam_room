@@ -76,7 +76,9 @@ export const sittingsApi = {
     });
     const cd = res.headers["content-disposition"] || "";
     const m = /filename="([^"]+)"/.exec(cd);
-    const filename = m?.[1] || (password ? `report_${id}.zip` : `report_${id}.xlsx`);
+    // AD-123: có mật khẩu hay không thì vẫn là .xlsx (mật khẩu đặt TRONG file,
+    // không còn bọc ZIP — Windows Explorer không mở nổi ZIP mã hoá AES).
+    const filename = m?.[1] || `report_${id}.xlsx`;
     triggerDownload(res.data, filename);
   },
 };

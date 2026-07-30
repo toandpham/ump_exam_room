@@ -128,8 +128,9 @@ function ExportPasswordModal({
     <Modal open={open} title="Xuất file Excel kết quả" onClose={() => { setPw(""); setErr(""); onClose(); }}>
       <div className="space-y-3">
         <p className="text-sm text-slate-600">
-          Nhập mật khẩu để xuất file <strong>ZIP mã hoá AES-256</strong> chứa Excel kết quả
-          (kèm cột đáp án từng câu của thí sinh).
+          Nhập mật khẩu để xuất <strong>file Excel có đặt mật khẩu</strong> (kèm cột đáp án
+          từng câu của thí sinh). Người nhận chỉ cần mở file bằng Excel rồi gõ mật khẩu —
+          <strong>không phải giải nén</strong>, không cần cài thêm phần mềm.
         </p>
         <div className="relative">
           <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -147,7 +148,7 @@ function ExportPasswordModal({
           </button>
           <button onClick={() => go(true)} disabled={busy || pw.length < 6}
             className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
-            {busy ? "Đang xuất…" : "Xuất ZIP mã hoá"}
+            {busy ? "Đang xuất…" : "Xuất Excel có mật khẩu"}
           </button>
         </div>
       </div>

@@ -47,7 +47,7 @@ async def get_report(
 @router.get("/sittings/{sitting_id}/report.xlsx")
 async def get_report_xlsx(
     sitting_id: uuid.UUID,
-    password: str = "",   # optional: when provided, return an AES-encrypted ZIP wrapping the .xlsx
+    password: str = "",   # có mật khẩu → .xlsx ĐẶT MẬT KHẨU (mở thẳng bằng Excel)
     db: AsyncSession = Depends(get_db),
     admin: Admin = Depends(_require_proctor),
 ) -> Response:
@@ -56,12 +56,13 @@ async def get_report_xlsx(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Mật khẩu phải ≥6 ký tự (hoặc để trống).")
     report = await report_service.build_report(db, sitting, exam_name=base)
     if password:
-        content = report_service.export_excel_encrypted_zip(
-            report, password, filename=f"{base}.xlsx",
-        )
+        # AD-123: KHÔNG bọc ZIP nữa. ZIP mã hoá AES-256 của WinZip thì Windows
+        # Explorer không mở được (chỉ hiểu ZipCrypto cũ) → trường báo "giải nén
+        # không được". Mật khẩu đặt ngay trong file Excel: double-click là Excel hỏi.
         return Response(
-            content=content, media_type="application/zip",
-            headers={"Content-Disposition": _attach(f"{base}.zip")},
+            content=report_service.export_excel_encrypted(report, password),
+            media_type=XLSX_MEDIA,
+            headers={"Content-Disposition": _attach(f"{base}.xlsx")},
         )
     return Response(
         content=report_service.export_excel(report),

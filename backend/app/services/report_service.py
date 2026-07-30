@@ -300,16 +300,22 @@ def export_excel(report: dict, exam_name: str | None = None) -> bytes:
     return bio.getvalue()
 
 
-def export_excel_encrypted_zip(report: dict, password: str, filename: str = "report.xlsx") -> bytes:
-    """Build the .xlsx and wrap it in a password-protected AES-encrypted ZIP.
-    Standard 7-Zip / WinRAR / macOS Archive Utility can open it given the
-    password — no special viewer needed."""
-    import pyzipper
-    xlsx_bytes = export_excel(report)
-    bio = io.BytesIO()
-    with pyzipper.AESZipFile(
-        bio, "w", compression=pyzipper.ZIP_DEFLATED, encryption=pyzipper.WZ_AES,
-    ) as zf:
-        zf.setpassword(password.encode("utf-8"))
-        zf.writestr(filename, xlsx_bytes)
-    return bio.getvalue()
+def export_excel_encrypted(report: dict, password: str) -> bytes:
+    """Xuất .xlsx có ĐẶT MẬT KHẨU theo chuẩn Office (AD-123).
+
+    Người nhận chỉ cần double-click: Excel hỏi mật khẩu rồi mở. KHÔNG phải giải nén,
+    KHÔNG cần cài thêm phần mềm.
+
+    Thay cho bản cũ bọc trong ZIP mã hoá AES-256 của WinZip: **Windows Explorer không
+    mở được kiểu đó** (chỉ hiểu ZipCrypto cũ) nên trường báo "giải nén không được" —
+    phải cài 7-Zip mới mở nổi, mà máy phòng đào tạo thường không có.
+
+    File ra là OLE2 (chuẩn ECMA-376 agile encryption): không có mật khẩu thì không đọc
+    được nội dung, chứ không phải chỉ khoá sửa.
+    """
+    import msoffcrypto
+    plain = io.BytesIO(export_excel(report))
+    plain.seek(0)
+    enc = io.BytesIO()
+    msoffcrypto.OfficeFile(plain).encrypt(password, enc)
+    return enc.getvalue()
