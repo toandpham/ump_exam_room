@@ -107,11 +107,13 @@ def test_evaluate_states():
 
 
 def test_evaluate_trial_from_install():
-    now = datetime.now(timezone.utc)
-    # Vừa cài (không key) → dùng thử, còn ~90 ngày.
+    # Dùng mốc CỐ ĐỊNH trong quá khứ gần để test không phụ thuộc ngày chạy.
+    now = datetime(2026, 7, 20, tzinfo=timezone.utc)
+    # Vừa cài (không key) → dùng thử. AD-126: hạn là mốc chung 15/8, KHÔNG còn là
+    # "90 ngày kể từ ngày cài" nữa.
     st = lic.evaluate(None, now, None, now=now)
     assert st.status == "trial" and st.ok is True
-    assert 88 <= (st.days_left or 0) <= 90
+    assert st.expires_at == lic.TRIAL_END
     # Cài đã quá 90 ngày, không key → hết hạn dùng thử.
     old = now - timedelta(days=91)
     assert lic.evaluate(None, old, None, now=now).status == "expired"
@@ -201,3 +203,36 @@ async def test_middleware_missing_vs_valid(client, monkeypatch, preserve_license
         await license_service.set_key(db, make_key(days=90))
     r = await client.get("/api/exam/auth/status")
     assert r.status_code != 403
+
+
+# ── Hạn dùng thử CHUNG: mọi trường chỉ tới 15/8/2026 (AD-126) ────────────────
+# Quyết định thương mại của nhà cung cấp: rút hạn dùng thử về một mốc CỐ ĐỊNH thay
+# vì 90 ngày kể từ ngày cài. Key gia hạn đã mua thì KHÔNG bị ảnh hưởng.
+
+def test_trial_capped_at_fixed_end_date():
+    """Trường cài giữa tháng 7: theo 90 ngày sẽ tới tận tháng 10 — nay chốt 15/8."""
+    from app.core.license import TRIAL_END
+
+    installed = datetime(2026, 7, 15, tzinfo=timezone.utc)
+    st = lic.evaluate(None, installed, None, now=datetime(2026, 8, 10, tzinfo=timezone.utc))
+    assert st.status == "trial"
+    assert st.expires_at == TRIAL_END, st.expires_at
+
+    # Qua mốc → hết hạn, dù chưa đủ 90 ngày kể từ ngày cài.
+    st = lic.evaluate(None, installed, None, now=datetime(2026, 8, 16, tzinfo=timezone.utc))
+    assert st.status == "expired"
+
+
+def test_trial_cap_never_extends_an_already_expired_trial():
+    """Trường cài từ lâu (đã quá 90 ngày) KHÔNG được kéo dài tới 15/8."""
+    installed = datetime(2026, 1, 1, tzinfo=timezone.utc)     # +90 ngày = 01/4
+    st = lic.evaluate(None, installed, None, now=datetime(2026, 5, 1, tzinfo=timezone.utc))
+    assert st.status == "expired", st
+
+
+def test_paid_key_is_not_affected_by_the_trial_cap():
+    """Trường đã mua key thì vẫn chạy bình thường sau 15/8 — chỉ dùng thử bị chốt."""
+    key = make_key(days=90, iat=int(datetime(2026, 8, 1, tzinfo=timezone.utc).timestamp()))
+    st = lic.evaluate(key, datetime(2026, 7, 15, tzinfo=timezone.utc), None,
+                      now=datetime(2026, 9, 1, tzinfo=timezone.utc))
+    assert st.status == "valid", st

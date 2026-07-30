@@ -38,6 +38,14 @@ WARN_DAYS = 14
 # Key gia hạn chỉ để đẩy hạn ra xa hơn mốc dùng thử này.
 TRIAL_DAYS = 90
 
+# AD-126: hạn dùng thử CHUNG cho mọi trường — mốc cố định thay cho "90 ngày kể từ
+# ngày cài" (mỗi nơi một hạn khác nhau, khó theo dõi). Lấy min() của hai mốc nên:
+#   • trường cài giữa tháng 7 (90 ngày sẽ tới tháng 10) → rút về mốc này;
+#   • trường đã hết dùng thử từ trước → KHÔNG được kéo dài thêm.
+# Trường đã mua key gia hạn KHÔNG bị ảnh hưởng (key còn hạn luôn được ưu tiên).
+# Giờ Việt Nam (UTC+7) — hết ngày 15/8, không phải hết ngày theo giờ UTC.
+TRIAL_END = datetime(2026, 8, 15, 23, 59, 59, tzinfo=timezone(timedelta(hours=7)))
+
 
 class LicenseError(ValueError):
     """Key sai định dạng / sai chữ ký — thông điệp an toàn để trả về client."""
@@ -144,7 +152,9 @@ def evaluate(key: str | None, installed_at: datetime | None,
 
     # Không có key còn hạn → xét dùng thử theo mốc cài đặt.
     if installed_at:
-        trial_exp = installed_at + timedelta(days=TRIAL_DAYS)
+        # min(): mốc chung 15/8 rút ngắn cho trường cài muộn, nhưng KHÔNG kéo dài
+        # cho trường đã hết 90 ngày từ trước (AD-126).
+        trial_exp = min(installed_at + timedelta(days=TRIAL_DAYS), TRIAL_END)
         if now < trial_exp:
             return LicenseState("trial", expires_at=trial_exp)
         # Hết dùng thử: nếu từng có key (nay đã hết hạn) báo hạn của key cho rõ.
