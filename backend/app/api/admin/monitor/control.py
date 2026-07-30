@@ -4,6 +4,7 @@ Control is keyed by SITTING (buổi thi): distribute / start / extend / end act 
 sitting's sessions.
 """
 
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -21,6 +22,8 @@ from app.services import exam_assets, session_service
 from app.websocket.manager import manager
 
 from ._common import _require_open_sitting, _require_proctor
+
+logger = logging.getLogger("exam.monitor")
 
 router = APIRouter()
 
@@ -98,21 +101,56 @@ async def extend_time(
 
 
 async def _finalize_in_progress(db: AsyncSession, sitting: Sitting) -> int:
-    """Force-submit + score every in_progress session of the sitting. Does NOT
-    commit — the caller commits after adding its own audit events."""
+    """Force-submit + score every in_progress session of the sitting.
+
+    R4: chấm theo LÔ và COMMIT từng lô. Trước đây cả buổi nằm trong MỘT giao dịch của
+    caller, nên một bản ghi lỗi là gãy toàn bộ nút "Đóng buổi" (HTTP 500) — không còn
+    đường nào chốt buổi thi từ giao diện, phải can thiệp CSDL giữa buổi. Nay lô lỗi
+    được cô lập tới từng phiên: các phiên lành vẫn được chốt và buổi vẫn đóng được.
+
+    Hệ quả có ý thức: các phiên đã chốt được commit TRƯỚC bước xoá đề của caller. Nếu
+    bước sau lỗi, buổi vẫn còn active và bấm "Đóng buổi" lại là xong (idempotent —
+    phiên đã submitted không bị chọn lại).
+    """
     correct_map = await session_service.correct_map_for_sitting(db, redis_client, sitting)
-    sessions = list(await db.scalars(
-        select(ExamSession).where(
-            ExamSession.sitting_id == sitting.id,
-            ExamSession.status == SessionStatus.IN_PROGRESS.value,
-        )
-    ))
+    running = (
+        ExamSession.sitting_id == sitting.id,
+        ExamSession.status == SessionStatus.IN_PROGRESS.value,
+    )
+    ids = list(await db.scalars(select(ExamSession.id).where(*running)))
     now = datetime.now(timezone.utc)
-    for s in sessions:
-        s.status = SessionStatus.SUBMITTED.value
-        s.submitted_at = now
-        await session_service.score_session(db, s, correct_map)
-    return len(sessions)
+
+    async def finalise(batch_ids: list) -> int:
+        # Lọc lại đúng điều kiện: giữa 2 truy vấn thí sinh có thể vừa tự nộp xong.
+        sessions = list(await db.scalars(
+            select(ExamSession).where(ExamSession.id.in_(batch_ids), *running)))
+        for s in sessions:
+            s.status = SessionStatus.SUBMITTED.value
+            s.submitted_at = now
+            await session_service.score_session(db, s, correct_map)
+        await db.commit()
+        return len(sessions)
+
+    done = 0
+    for batch in session_service.batched(ids, session_service.SCORE_BATCH):
+        try:
+            done += await finalise(batch)
+        except Exception as exc:  # noqa: BLE001 — cô lập, không để cả buổi gãy
+            await db.rollback()
+            logger.error("end_sitting: lô %d phiên lỗi (%s) — chấm lại từng phiên",
+                         len(batch), exc)
+            for sid in batch:
+                try:
+                    done += await finalise([sid])
+                except Exception as exc2:  # noqa: BLE001
+                    await db.rollback()
+                    logger.error("end_sitting: BỎ QUA phiên %s — chấm lỗi: %s", sid, exc2)
+    if ids:
+        # Commit/rollback làm "expire" mọi đối tượng ORM. Caller còn đọc sitting.id +
+        # sitting.encrypted_payload, mà đọc thuộc tính đã expire sẽ cố truy vấn NGOÀI
+        # greenlet của SQLAlchemy async → MissingGreenlet. Nạp lại trước khi trả về.
+        await db.refresh(sitting)
+    return done
 
 
 @router.post("/sittings/{sitting_id}/end", response_model=EndResult)

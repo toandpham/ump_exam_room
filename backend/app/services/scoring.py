@@ -24,6 +24,21 @@ from .session_payload import (
 )
 from .events import make_event
 
+# R4 — chấm theo LÔ. Cả hai đường chốt bài (vòng quét tự-nộp và "Đóng buổi") trước
+# đây chấm TOÀN BỘ phiên trong MỘT giao dịch: 500 thí sinh ≈ 1.500 câu lệnh, một lần
+# ghi. Bất kỳ dòng nào lỗi là rollback tất cả → KHÔNG AI được nộp, vòng lặp 5 giây
+# lặp lại đúng lỗi đó mãi mãi, và nút "Đóng buổi" cũng gãy y hệt (cùng khuôn) nên
+# không còn đường nào chốt buổi thi từ giao diện.
+# 50: đủ lớn để 500 phiên chỉ tốn 10 lần ghi, đủ nhỏ để một lô lỗi không mất nhiều.
+SCORE_BATCH = 50
+
+
+def batched(items: list, size: int):
+    """Chia danh sách thành các lô liên tiếp (size ≥ 1)."""
+    step = max(1, size)
+    for i in range(0, len(items), step):
+        yield items[i:i + step]
+
 logger = logging.getLogger("exam.session")
 
 

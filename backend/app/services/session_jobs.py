@@ -25,7 +25,7 @@ from .session_payload import (
     sitting_payload_blob,
 )
 from .events import make_event
-from .scoring import correct_map_for_sitting, score_session
+from .scoring import SCORE_BATCH, batched, correct_map_for_sitting, score_session
 
 logger = logging.getLogger("exam.session")
 
@@ -38,31 +38,57 @@ async def auto_submit_expired(redis) -> int:
 
     Runs on a short interval from the app lifespan. The monitor (8s poll) and the
     candidate client (5s /state poll) pick up the status flip without a WS push.
+
+    R4: chấm theo LÔ (``SCORE_BATCH``) và commit từng lô. Lô nào lỗi thì rollback rồi
+    chấm lại TỪNG phiên để cô lập đúng bản ghi hỏng — các phiên lành vẫn được nộp.
+    Trước đây cả 500 phiên nằm trong một giao dịch: một dòng lỗi là không ai được nộp.
     """
     now = datetime.now(timezone.utc)
+    expired = (
+        ExamSession.status == SessionStatus.IN_PROGRESS.value,
+        ExamSession.paused_at.is_(None),
+        ExamSession.end_time.is_not(None),
+        ExamSession.end_time < now,
+    )
     async with AsyncSessionLocal() as db:
-        sessions = list(await db.scalars(
-            select(ExamSession).where(
-                ExamSession.status == SessionStatus.IN_PROGRESS.value,
-                ExamSession.paused_at.is_(None),
-                ExamSession.end_time.is_not(None),
-                ExamSession.end_time < now,
-            )
-        ))
-        if not sessions:
+        ids = list(await db.scalars(select(ExamSession.id).where(*expired)))
+        if not ids:
             return 0
         correct_by_sitting: dict = {}
-        for s in sessions:
-            if s.sitting_id not in correct_by_sitting:
-                sitting = await db.get(Sitting, s.sitting_id)
-                correct_by_sitting[s.sitting_id] = await correct_map_for_sitting(db, redis, sitting)
-            s.status = SessionStatus.TIMEOUT.value
-            s.submitted_at = now
-            await score_session(db, s, correct_by_sitting[s.sitting_id])
-            db.add(make_event(event_type=EventType.TIMEOUT_SUBMIT.value, session_id=s.id,
-                              metadata={"sitting_id": str(s.sitting_id)}))
-        await db.commit()
-    return len(sessions)
+
+        async def finalise(batch_ids: list) -> int:
+            # Lọc lại ĐÚNG điều kiện lúc chọn: giữa 2 truy vấn thí sinh có thể vừa tự
+            # nộp, hoặc giám thị vừa tạm dừng — không được ghi đè lên họ.
+            sessions = list(await db.scalars(
+                select(ExamSession).where(ExamSession.id.in_(batch_ids), *expired)))
+            for s in sessions:
+                if s.sitting_id not in correct_by_sitting:
+                    sitting = await db.get(Sitting, s.sitting_id)
+                    correct_by_sitting[s.sitting_id] = await correct_map_for_sitting(
+                        db, redis, sitting)
+                s.status = SessionStatus.TIMEOUT.value
+                s.submitted_at = now
+                await score_session(db, s, correct_by_sitting[s.sitting_id])
+                db.add(make_event(event_type=EventType.TIMEOUT_SUBMIT.value, session_id=s.id,
+                                  metadata={"sitting_id": str(s.sitting_id)}))
+            await db.commit()
+            return len(sessions)
+
+        done = 0
+        for batch in batched(ids, SCORE_BATCH):
+            try:
+                done += await finalise(batch)
+            except Exception as exc:  # noqa: BLE001 — cô lập, không để cả phòng gãy
+                await db.rollback()
+                logger.error("auto_submit: lô %d phiên lỗi (%s) — chấm lại từng phiên",
+                             len(batch), exc)
+                for sid in batch:
+                    try:
+                        done += await finalise([sid])
+                    except Exception as exc2:  # noqa: BLE001
+                        await db.rollback()
+                        logger.error("auto_submit: BỎ QUA phiên %s — chấm lỗi: %s", sid, exc2)
+    return done
 
 
 async def reconcile_active_sittings(redis) -> int:

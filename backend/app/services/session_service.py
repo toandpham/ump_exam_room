@@ -39,6 +39,8 @@ from .session_payload import (  # noqa: F401
 # Hằng nội bộ nhưng test/conftest dọn cache dùng tới → re-export luôn.
 from .session_payload import _ACTIVE_EXAMS_CACHE_KEY  # noqa: F401
 from .scoring import (  # noqa: F401
+    SCORE_BATCH,
+    batched,
     compute_results_hash,
     correct_map_for_sitting,
     correct_map_from_payload,
