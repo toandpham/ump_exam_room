@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FileText, KeyRound, Plus, Trash2 } from "lucide-react";
 import type { Exam, Room } from "../../api/types";
 import { roomsApi, type RoomUpdate } from "../../api/rooms";
+import { loadPin, savePin, clearPin } from "../../lib/proctorPin";
 import { adminsApi } from "../../api/admins";
 import { errorMessage } from "../../api/client";
 import Modal from "../../components/Modal";
@@ -128,10 +129,12 @@ function RoomRow({ room, proctors, onUpdate, onRemove }: {
 }) {
   const [cap, setCap] = useState(String(room.capacity));
   const [realName, setRealName] = useState(room.proctor_real_name ?? "");
-  const [pinInfo, setPinInfo] = useState<{ pin: string; username: string; full_name: string | null } | null>(null);
+  // Mã 6 số server chỉ trả về MỘT LẦN → nhớ trên máy chủ tịch để vào lại tab vẫn
+  // thấy (trước đây rời trang là mất, phải đặt mã mới trong khi giám thị cầm mã cũ).
+  const [pinInfo, setPinInfo] = useState(() => loadPin(room.id));
   const resetPin = useMutation({
     mutationFn: () => adminsApi.resetRoomProctorPin(room.proctor_id!),
-    onSuccess: (r) => setPinInfo(r),
+    onSuccess: (r) => { savePin(room.id, r); setPinInfo(r); },
   });
   return (
     <tr className="hover:bg-slate-50 align-top">
@@ -144,7 +147,7 @@ function RoomRow({ room, proctors, onUpdate, onRemove }: {
       <td className="px-4 py-3">
         <div className="flex items-center gap-2 flex-wrap">
           <select className="input max-w-56" value={room.proctor_id ?? ""}
-            onChange={(e) => { setPinInfo(null); onUpdate({ proctor_id: e.target.value || null }); }}>
+            onChange={(e) => { clearPin(room.id); setPinInfo(null); onUpdate({ proctor_id: e.target.value || null }); }}>
             <option value="">— Chưa phân công —</option>
             {proctors.map((p) => (
               <option key={p.id} value={p.id}>{p.full_name || p.username}</option>
