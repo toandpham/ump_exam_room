@@ -35,15 +35,14 @@ export default function DashboardPage() {
         việc tổ chức thi (nạp đề, giám sát…) do giám thị thực hiện.
       </p>
 
-      {/* AD-74: cảnh báo giấy phép sắp hết hạn (≤14 ngày) hoặc đã có vấn đề. */}
-      {license?.warn && (
+      {/* AD-126: KHÔNG còn banner "sắp hết hạn" đếm ngược. Chỉ hiện khi hệ thống
+          ĐÃ bị khoá — lúc đó không báo thì người dùng không biết đường xử lý. */}
+      {license && license.status !== "valid" && license.status !== "trial" && (
         <Link to="/license"
           className="mb-4 flex items-center gap-3 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-rose-800 hover:bg-rose-100">
           <ShieldAlert size={20} className="shrink-0" />
           <span className="text-sm font-semibold">
-            {license.status === "valid" || license.status === "trial"
-              ? `${license.status === "trial" ? "Bản dùng thử" : "Giấy phép"} còn ${license.days_left} ngày — lấy key gia hạn từ nhà cung cấp rồi nhập tại trang Giấy phép.`
-              : "Giấy phép không hợp lệ — bấm để mở trang Giấy phép."}
+            Giấy phép không hợp lệ — bấm để mở trang Giấy phép.
           </span>
         </Link>
       )}

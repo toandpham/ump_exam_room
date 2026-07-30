@@ -73,13 +73,7 @@ export default function LicensePage() {
         )}
         {isTrial && (
           <p className="mt-2 text-sm">
-            Bản dùng thử tự động 90 ngày kể từ lúc cài. Nhập <b>key gia hạn</b> bên dưới bất cứ
-            lúc nào để kéo dài thời gian sử dụng.
-          </p>
-        )}
-        {ok && data?.warn && (
-          <p className="mt-2 text-sm font-semibold text-amber-700">
-            ⚠️ Sắp hết hạn — liên hệ nhà cung cấp để lấy key gia hạn ngay từ bây giờ.
+            Nhập <b>key gia hạn</b> bên dưới bất cứ lúc nào để kéo dài thời gian sử dụng.
           </p>
         )}
         {!ok && (
