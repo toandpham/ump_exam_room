@@ -232,8 +232,14 @@ def _extract_blocks(elem: ET.Element, root_dir: str) -> list[dict]:
             if e.tail:
                 buf.append(e.tail)
             return
-        if tag in ("sup", "sub"):
+        if tag in ("sup", "sub") and not _findall(e, "img"):
             # Gộp cả thẻ lồng bên trong (vd <sup><strong>9</strong></sup>).
+            #
+            # AD-132: CHỈ đi lối tắt này khi bên trong KHÔNG có ảnh. Có đề viết
+            # `<p><sub><img src="…"/></sub></p>` (bên soạn bọc nhầm); lối tắt gộp
+            # chữ rồi return sẽ không bao giờ duyệt tới <img> → mất ảnh IM LẶNG.
+            # Có ảnh thì rơi xuống nhánh nội tuyến thường: chữ mất kiểu chỉ số,
+            # đổi lại ảnh còn nguyên và đúng vị trí — mất nội dung đề là điều cấm.
             buf.append(_to_script("".join(e.itertext()), tag))
             if e.tail:
                 buf.append(e.tail)
