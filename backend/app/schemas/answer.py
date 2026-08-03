@@ -45,6 +45,9 @@ class ExamBlock(BaseModel):
     src: str = ""
     # AD-107: bản nhỏ hiển thị; "" → FE dùng ``src``. Phóng to luôn tải ``src``.
     thumb: str = ""
+    # AD-129: "table" mang lưới ô theo hàng; ``header`` = hàng đầu là tiêu đề.
+    rows: list[list[str]] = Field(default_factory=list)
+    header: bool = False
 
 
 class ExamQuestion(BaseModel):

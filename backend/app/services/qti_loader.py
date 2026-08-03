@@ -170,8 +170,52 @@ def _extract_blocks(elem: ET.Element, root_dir: str) -> list[dict]:
         if text:
             blocks.append({"type": "text", "text": text})
 
+    def cell_text(td: ET.Element) -> str:
+        """Chữ trong một ô — đi qua đúng đường xử lý chung (số mũ, <br/>, thẻ khối)."""
+        parts = [b["text"] for b in _extract_blocks(td, root_dir) if b["type"] == "text"]
+        return " ".join(p.replace("\n", " ") for p in parts).strip()
+
+    def walk_table(tbl: ET.Element) -> None:
+        """<table> → MỘT khối giữ quan hệ hàng-cột (AD-129).
+
+        Trước đây table/tr/td chỉ chèn xuống dòng nên mỗi ô rơi xuống một dòng
+        riêng, mất sạch cấu trúc và thí sinh không đọc nổi.
+
+        Nhà cung cấp KHÔNG dùng <th>: hàng tiêu đề được đánh dấu bằng <strong> bên
+        trong <td>, nên nhận diện tiêu đề theo cả hai cách.
+        """
+        rows: list[list[str]] = []
+        header = False
+        for tr in _findall(tbl, "tr"):
+            cells = [c for c in tr if _localname(c.tag) in ("td", "th")]
+            if not cells:
+                continue
+            if not rows:
+                header = all(_localname(c.tag) == "th" for c in cells) or all(
+                    len(list(c)) == 1 and _localname(list(c)[0].tag) == "strong"
+                    and not (c.text or "").strip()
+                    for c in cells
+                )
+            rows.append([cell_text(c) for c in cells])
+        if not rows:
+            return
+        flush()   # chốt đoạn chữ trước bảng → giữ đúng vị trí bảng trong câu hỏi
+        blocks.append({"type": "table", "rows": rows, "header": header})
+        # Ảnh nằm trong ô (hiếm) — đưa ra sau bảng, không được im lặng bỏ mất.
+        for img in _findall(tbl, "img"):
+            src = img.attrib.get("src")
+            if src:
+                loaded = _load_image(os.path.join(root_dir, src))
+                if loaded:
+                    blocks.append({"type": "image", **loaded})
+
     def walk(e: ET.Element) -> None:
         tag = _localname(e.tag)
+        if tag == "table":
+            walk_table(e)
+            if e.tail:
+                buf.append(e.tail)
+            return
         if tag == "img":
             src = e.attrib.get("src") or e.attrib.get("{http://www.w3.org/1999/xhtml}src")
             if src:
@@ -215,7 +259,15 @@ def _extract_text_and_images(elem: ET.Element, root_dir: str) -> tuple[str, list
     """Tương thích ngược: trả (text, images) gộp từ các khối. Text = nối các khối
     chữ bằng \\n; images = ảnh theo thứ tự. Dùng cho đáp án + nơi không cần khối."""
     blocks = _extract_blocks(elem, root_dir)
-    text = "\n".join(b["text"] for b in blocks if b["type"] == "text")
+    lines: list[str] = []
+    for b in blocks:
+        if b["type"] == "text":
+            lines.append(b["text"])
+        elif b["type"] == "table":
+            # Bảng ở dạng lưới chữ — thô nhưng còn đọc được; bỏ qua thì nội dung
+            # biến mất hẳn ở mọi chỗ còn dùng ``text`` (AD-129).
+            lines.extend(" | ".join(row) for row in b["rows"])
+    text = "\n".join(lines)
     images = [{"b64": b["b64"], "mime": b["mime"]} for b in blocks if b["type"] == "image"]
     return text, images
 

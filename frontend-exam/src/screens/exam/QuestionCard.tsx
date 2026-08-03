@@ -60,7 +60,9 @@ function QuestionCard({
         {q.blocks && q.blocks.length > 0 ? (
           <div className="mb-4">
             {q.blocks.map((b, i) =>
-              b.type === "image" && b.src ? (
+              b.type === "table" && b.rows?.length ? (
+                <QuestionTable key={i} rows={b.rows} header={!!b.header} />
+              ) : b.type === "image" && b.src ? (
                 <img key={i} src={b.thumb || b.src} onClick={() => setZoom({ full: b.src!, thumb: b.thumb || b.src! })}
                   loading="lazy" decoding="async" title="Bấm để phóng to"
                   className="max-h-72 rounded border cursor-zoom-in hover:opacity-90 my-3" />
@@ -172,6 +174,38 @@ function QuestionCard({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Bảng trong đề (AD-129). Ô chỉ chứa CHỮ (bộ nạp đã bóc sẵn) nên không có đường
+ * nhúng HTML từ file đề. Cuộn ngang riêng để bảng rộng không đẩy vỡ layout câu hỏi. */
+function QuestionTable({ rows, header }: { rows: string[][]; header: boolean }) {
+  const body = header ? rows.slice(1) : rows;
+  return (
+    <div className="my-3 overflow-x-auto">
+      <table className="border-collapse text-base">
+        {header && (
+          <thead>
+            <tr>
+              {rows[0].map((c, i) => (
+                <th key={i} className="border border-slate-400 px-3 py-1.5 bg-slate-100 font-semibold text-left align-top">
+                  {sciText(c)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+        )}
+        <tbody>
+          {body.map((r, ri) => (
+            <tr key={ri}>
+              {r.map((c, ci) => (
+                <td key={ci} className="border border-slate-400 px-3 py-1.5 align-top">{sciText(c)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

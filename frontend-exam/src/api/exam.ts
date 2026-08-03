@@ -52,10 +52,12 @@ export interface ExamOption {
 }
 /** Khối nội dung câu hỏi CÓ THỨ TỰ (AD-98): chữ ↔ ảnh xen kẽ đúng như file QTI. */
 export interface ExamBlock {
-  type: "text" | "image";
+  type: "text" | "image" | "table";
   text?: string;
   src?: string;
   thumb?: string;         // AD-107: bản nhỏ hiển thị; phóng to luôn tải src
+  rows?: string[][];      // AD-129: bảng — lưới ô theo hàng
+  header?: boolean;       // AD-129: hàng đầu là tiêu đề
 }
 export interface ExamQuestion {
   id: string;

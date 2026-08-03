@@ -163,3 +163,58 @@ describe("QuestionCard — số mũ / chỉ số dưới", () => {
     expect(container.querySelector("sup")?.textContent).toBe("9");
   });
 });
+
+// AD-129: đề có <table> — trước đây mỗi ô rơi xuống một dòng riêng nên mất sạch
+// quan hệ hàng-cột, thí sinh không đọc được.
+describe("QuestionCard — bảng trong đề", () => {
+  const tableQ: ExamQuestion = {
+    ...Q,
+    text: "",
+    blocks: [
+      { type: "text", text: "X-quang ngực: Phổi ứ khí." },
+      { type: "table", header: true,
+        rows: [["A", "B", "C"], ["1", "3", "5"], ["2", "4", "6"]] },
+      { type: "text", text: "Thái độ xử trí ban đầu nào là phù hợp nhất?" },
+    ],
+  };
+
+  it("dựng đúng lưới hàng × cột", () => {
+    const { container } = render(
+      <QuestionCard q={tableQ} index={0} total={1} answers={{}} unansweredCount={0}
+        flagged={false} onToggleFlag={noop} onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+    );
+    const table = container.querySelector("table");
+    expect(table).toBeTruthy();
+    const rows = [...table!.querySelectorAll("tr")];
+    expect(rows.length).toBe(3);
+    expect([...rows[1].querySelectorAll("td,th")].map((c) => c.textContent)).toEqual(["1", "3", "5"]);
+  });
+
+  it("hàng tiêu đề dùng <th>", () => {
+    const { container } = render(
+      <QuestionCard q={tableQ} index={0} total={1} answers={{}} unansweredCount={0}
+        flagged={false} onToggleFlag={noop} onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+    );
+    expect([...container.querySelectorAll("th")].map((c) => c.textContent)).toEqual(["A", "B", "C"]);
+  });
+
+  it("giữ đúng vị trí bảng giữa hai đoạn chữ", () => {
+    const { container } = render(
+      <QuestionCard q={tableQ} index={0} total={1} answers={{}} unansweredCount={0}
+        flagged={false} onToggleFlag={noop} onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+    );
+    const kinds = [...container.querySelectorAll("p,table")].map((e) => e.tagName.toLowerCase());
+    expect(kinds.slice(0, 3)).toEqual(["p", "table", "p"]);
+  });
+
+  it("ô bảng cũng đổi số mũ sang <sup> ASCII", () => {
+    const q: ExamQuestion = { ...Q, text: "",
+      blocks: [{ type: "table", header: false, rows: [["Bạch cầu 10⁹/L"]] }] };
+    const { container } = render(
+      <QuestionCard q={q} index={0} total={1} answers={{}} unansweredCount={0}
+        flagged={false} onToggleFlag={noop} onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+    );
+    expect(container.querySelector("td sup")?.textContent).toBe("9");
+    expect(container.textContent).not.toContain("⁹");
+  });
+});

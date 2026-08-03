@@ -150,6 +150,9 @@ async def get_questions(
                 idx = b.get("index", 0)
                 if 0 <= idx < len(q_pairs):
                     blocks.append(ExamBlock(type="image", src=q_pairs[idx][0], thumb=q_pairs[idx][1]))
+            elif b.get("type") == "table" and b.get("rows"):
+                blocks.append(ExamBlock(type="table", rows=b["rows"],
+                                        header=bool(b.get("header"))))
             elif b.get("text"):
                 blocks.append(ExamBlock(type="text", text=b["text"]))
         questions.append(ExamQuestion(
