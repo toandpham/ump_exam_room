@@ -18,6 +18,7 @@ from app.api.deps import (
     sitting_for_admin,
 )
 from app.core import device_lock
+from app.core.redis import redis_client
 from app.database import get_db
 from app.models import Admin, ExamSession
 from app.models.enums import EventType, SessionStatus
@@ -25,6 +26,7 @@ from app.schemas.monitor import StartResult
 from app.services import session_service
 from app.websocket.manager import manager
 
+from .control import KIOSK_QUIT_TTL_SECONDS
 from ._common import _require_open_sitting, _require_proctor, _require_proctor_or_room
 
 router = APIRouter()
@@ -168,6 +170,38 @@ async def logout_candidate(
     await manager.publish("admin", "candidate_logout", exam_id=exam_id,
                           data={"candidate_id": str(cand_id)})
     return {"session_id": str(session_id), "logged_out": True, "removed_session": not_started}
+
+
+@router.post("/sessions/{session_id}/kiosk-quit")
+async def kiosk_quit_session(
+    session_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(_require_proctor_or_room),
+) -> dict:
+    """Thoát phần mềm thi trên ĐÚNG MÁY của một thí sinh (AD-128).
+
+    Giám thị chỉ làm được với thí sinh trong phòng mình (``session_for_pause``).
+    KHÔNG chặn theo trạng thái: theo yêu cầu vận hành 02-08 thoát được bất kỳ lúc
+    nào, phần an toàn nằm ở hộp xác nhận phía giao diện.
+
+    Máy nhận lệnh ở lần hỏi kế (~5s). Phiên chưa từng đăng nhập trên máy nào thì
+    chưa có ``device_id`` → trả ``targeted=false`` để giao diện nói rõ, thay vì im
+    lặng làm như đã gửi.
+    """
+    session = await session_for_pause(db, session_id, admin)
+    if not session.device_id:
+        return {"targeted": False,
+                "detail": "Chưa biết máy của thí sinh này (chưa đăng nhập lần nào "
+                          "trên máy có phần mềm thi)."}
+    await redis_client.set(
+        session_service.kiosk_quit_device_key(session.device_id), "1",
+        ex=KIOSK_QUIT_TTL_SECONDS)
+    db.add(session_service.make_event(
+        event_type=EventType.EXAM_END.value, session_id=session.id,
+        metadata={"action": "kiosk_quit_session", "admin": admin.username,
+                  "candidate_id": str(session.candidate_id)}))
+    await db.commit()
+    return {"targeted": True, "machines": 1}
 
 
 @router.post("/sessions/{session_id}/admit", response_model=StartResult)

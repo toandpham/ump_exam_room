@@ -33,6 +33,14 @@ def kiosk_quit_key(exam_id) -> str:
     return f"kiosk_quit:{exam_id}"
 
 
+def kiosk_quit_device_key(device_id: str) -> str:
+    """Cờ Redis yêu cầu ĐÚNG MỘT máy thoát (AD-128) — dùng cho lệnh thoát theo
+    từng thí sinh / theo phòng của giám thị. Khoá theo ``device_id`` mà kiosk khai
+    lúc hỏi lệnh (IP vô dụng vì mọi máy ra cùng gateway Docker — AD-35).
+    Hạn ngắn như cờ cả kỳ thi để máy bật lại sau đó không bị đóng oan."""
+    return f"kiosk_quit_dev:{device_id}"
+
+
 def kiosk_wipe_key(exam_id) -> str:
     """Redis flag yêu cầu mọi máy kiosk của kỳ thi này XOÁ đề + đáp án local
     (HTTP cache + storage) rồi về đăng nhập (SP-4). Set khi đóng buổi, xoá khi

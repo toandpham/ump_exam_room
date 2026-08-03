@@ -66,14 +66,22 @@ async def get_state(
 
 
 @router.get("/kiosk/command")
-async def kiosk_command(db: AsyncSession = Depends(get_db)) -> dict:
+async def kiosk_command(device: str = "", db: AsyncSession = Depends(get_db)) -> dict:
     """Polled by Exam Kiosk machines (~5s). Returns {"quit": true} when the chủ
     tịch has triggered 'Thoát tất cả máy thi' for any currently-active exam (AD-66).
     No auth + no kiosk gate on purpose: idle (not-logged-in) machines must poll too.
-    In production the at-most-1-active invariant ensures at most one active exam."""
+    In production the at-most-1-active invariant ensures at most one active exam.
+
+    ``device`` (AD-128): máy tự khai ``device_id`` của mình để nhận được lệnh thoát
+    nhắm riêng nó (giám thị đóng một máy / cả phòng). Kiosk bản CŨ không gửi tham số
+    này — khi đó chỉ còn lệnh cấp cả kỳ thi, đúng như trước, nên không vỡ gì."""
     # Lệnh quit chỉ tới được khi kỳ thi vẫn ACTIVE; nếu đóng kỳ thi trước thì flag Redis đã bị xoá.
     # Danh sách kỳ thi active lấy từ cache Redis (AD-69) — endpoint này MỌI máy poll
     # mỗi 5s, trước đây query DB mỗi lần là tải áp đảo.
+    # Lệnh nhắm riêng máy này (AD-128) — độc lập với kỳ thi nào đang mở, vì giám
+    # thị vẫn cần đóng một máy lẻ sau khi buổi đã đóng.
+    if device and await redis_client.get(session_service.kiosk_quit_device_key(device)):
+        return {"quit": True, "wipe": False}
     exams = await session_service.cached_active_exams(db, redis_client)
     if not exams:
         return {"quit": False, "wipe": False}

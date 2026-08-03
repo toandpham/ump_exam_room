@@ -401,9 +401,13 @@ async def test_giam_thi_cannot_add_candidate(client, factory):
         await s.commit()
 
 
-async def test_giam_thi_action_surface_is_pause_resume_only(client, factory):
-    """Chốt PHẠM VI QUYỀN: giám thị chỉ được XEM phòng mình + Tạm dừng/Tiếp tục.
-    Mọi cửa hành động khác của chủ tịch phải trả 403."""
+async def test_giam_thi_action_surface(client, factory):
+    """Chốt PHẠM VI QUYỀN của giám thị: XEM phòng mình + Tạm dừng/Tiếp tục từng thí
+    sinh + Thoát máy thi trong phòng mình (AD-128). Mọi cửa điều phối khác của chủ
+    tịch phải trả 403.
+
+    Mở thêm cửa nào cho giám thị thì PHẢI sửa test này một cách có chủ đích —
+    đó là mục đích của nó."""
     chair, _ctok = await factory.admin(role=AdminRole.PROCTOR.value)
     gt, gttok = await factory.admin(role=AdminRole.ROOM_PROCTOR.value)
     exam, sitting, _ = await factory.active_exam([{"text": "Q", "correct": "A"}], owner_id=chair.id)
@@ -414,6 +418,9 @@ async def test_giam_thi_action_surface_is_pause_resume_only(client, factory):
     assert (await client.get("/api/admin/my-rooms", headers=h)).status_code == 200
     assert (await client.get(f"/api/admin/rooms/{room.id}/seating", headers=h)).status_code == 200
     assert (await client.get(f"/api/admin/sittings/{sitting.id}/sessions", headers=h)).status_code == 200
+
+    # ĐƯỢC đóng máy thi trong phòng mình (AD-128)
+    assert (await client.post(f"/api/admin/rooms/{room.id}/kiosk-quit", headers=h)).status_code == 200
 
     # KHÔNG được điều phối kỳ thi / buổi thi
     for method, url in [
@@ -430,6 +437,7 @@ async def test_giam_thi_action_surface_is_pause_resume_only(client, factory):
         ("get", f"/api/admin/candidates?exam_id={exam.id}"),
         ("post", "/api/admin/candidates"),
         ("post", "/api/admin/candidates/emergency-add"),
+        ("post", f"/api/admin/exams/{exam.id}/kiosk-quit"),
     ]:
         r = await getattr(client, method)(url, headers=h, **({"json": {}} if method == "post" else {}))
         assert r.status_code == 403, f"{method.upper()} {url} → {r.status_code} (phải 403)"

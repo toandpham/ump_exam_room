@@ -2,9 +2,17 @@
 // Poll lệnh điều khiển từ server (quit = thoát máy; wipe = xoá đề + reload đăng nhập). KHÔNG import electron.
 const http = require("http");
 
-function fetchCommand(baseUrl) {
+// AD-128: khai máy mình (device_id của app thi, lấy từ localStorage) để nhận được
+// lệnh thoát nhắm riêng máy này — giám thị đóng 1 máy hoặc cả phòng. Không biết máy
+// (chưa ai đăng nhập) → gọi trơn như trước, vẫn nhận lệnh cấp cả kỳ thi.
+function commandUrl(baseUrl, deviceId) {
+  const base = baseUrl + "/api/exam/kiosk/command";
+  return deviceId ? base + "?device=" + encodeURIComponent(deviceId) : base;
+}
+
+function fetchCommand(baseUrl, deviceId) {
   return new Promise((resolve) => {
-    const req = http.get(baseUrl + "/api/exam/kiosk/command", { timeout: 4000 }, (res) => {
+    const req = http.get(commandUrl(baseUrl, deviceId), { timeout: 4000 }, (res) => {
       let body = "";
       res.on("data", (c) => (body += c));
       res.on("end", () => {
@@ -42,4 +50,4 @@ function startPolling({ getter, intervalMs, onQuit, onWipe }) {
   return () => clearInterval(timer);
 }
 
-module.exports = { fetchCommand, pollOnce, startPolling };
+module.exports = { commandUrl, fetchCommand, pollOnce, startPolling };

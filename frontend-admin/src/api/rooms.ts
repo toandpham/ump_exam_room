@@ -47,4 +47,8 @@ export const roomsApi = {
   },
 
   myRooms: async (): Promise<MyRoom[]> => (await api.get("/admin/my-rooms")).data,
+
+  /** Thoát phần mềm thi trên MỌI máy đã đăng nhập của phòng này (AD-128). */
+  kioskQuitRoom: async (roomId: string): Promise<{ machines: number }> =>
+    (await api.post(`/admin/rooms/${roomId}/kiosk-quit`)).data,
 };

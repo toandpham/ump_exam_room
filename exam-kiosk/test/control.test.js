@@ -2,7 +2,8 @@
 const { test, mock } = require("node:test");
 const assert = require("node:assert");
 const http = require("node:http");
-const { pollOnce, fetchCommand, startPolling } = require("../src/control");
+const { pollOnce, fetchCommand, startPolling, commandUrl } = require("../src/control");
+const control = { commandUrl };
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -94,4 +95,21 @@ test("quit takes precedence over wipe and stops polling", async () => {
   assert.strictEqual(onQuit.mock.callCount(), 1);  // dừng sau lần đầu
   assert.strictEqual(onWipe.mock.callCount(), 0);  // quit ưu tiên, không gọi wipe
   stop();
+});
+
+// AD-128: máy khai mã của mình để nhận lệnh thoát nhắm riêng nó.
+test("commandUrl gắn device khi biết mã máy", () => {
+  assert.equal(
+    control.commandUrl("http://s", "abc-123"),
+    "http://s/api/exam/kiosk/command?device=abc-123",
+  );
+});
+
+test("commandUrl gọi trơn khi chưa biết mã máy (bản cũ / chưa ai đăng nhập)", () => {
+  assert.equal(control.commandUrl("http://s", ""), "http://s/api/exam/kiosk/command");
+  assert.equal(control.commandUrl("http://s"), "http://s/api/exam/kiosk/command");
+});
+
+test("commandUrl mã hoá ký tự đặc biệt trong mã máy", () => {
+  assert.ok(control.commandUrl("http://s", "a b&c=1").endsWith("?device=a%20b%26c%3D1"));
 });

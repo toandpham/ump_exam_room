@@ -27,6 +27,7 @@ from .session_payload import (  # noqa: F401
     ensure_sitting_payload,
     get_active_sitting,
     get_sitting_payload,
+    kiosk_quit_device_key,
     kiosk_quit_key,
     kiosk_wipe_key,
     payload_key,

@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import exam_for_admin, sitting_for_admin
@@ -228,24 +228,16 @@ async def kiosk_quit(
     of this exam polls (GET /api/exam/kiosk/command). Ownership-gated (AD-30).
 
     LƯU Ý: kiosk từ v1.3.0 (AD-93) nhận lệnh này sẽ ĐÓNG phần mềm thi về desktop
-    (KHÔNG reboot); máy chạy bản cũ hơn vẫn reboot. AD-92 chặn cứng khi CÒN NGƯỜI
-    ĐANG THI — một cú bấm nhầm sẽ văng thí sinh khỏi bài toàn phòng. Muốn vẫn gửi
-    (máy treo, cần dọn phòng gấp) thì gọi lại với ``force=true``.
+    (KHÔNG reboot); máy chạy bản cũ hơn vẫn reboot.
+
+    AD-128 (yêu cầu vận hành 02-08): **bỏ chốt chặn 409 khi còn người đang thi**
+    (AD-92) — chủ tịch phải thoát được bất kỳ lúc nào, kể cả để dọn máy treo giữa
+    buổi. An toàn chuyển sang hộp xác nhận ở giao diện, và mỗi lần bấm đều ghi
+    ``exam_events`` nên tra lại được ai bấm lúc nào. Tham số ``force`` giữ lại cho
+    tương thích với giao diện cũ, nay không còn tác dụng.
     """
     await exam_for_admin(db, exam_id, admin)  # ownership gate (404 if not owner)
-    if not force:
-        running = await db.scalar(
-            select(func.count(ExamSession.id)).where(
-                ExamSession.exam_id == exam_id,
-                ExamSession.status == SessionStatus.IN_PROGRESS.value,
-            )
-        ) or 0
-        if running:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                f"Còn {running} thí sinh ĐANG LÀM BÀI — lệnh này sẽ khởi động lại máy "
-                "của họ. Hãy chờ nộp xong (hoặc đóng buổi thi) rồi mới thoát máy.",
-            )
+    del force
     await redis_client.set(
         session_service.kiosk_quit_key(exam_id), "1", ex=KIOSK_QUIT_TTL_SECONDS)
     db.add(session_service.make_event(

@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { DoorOpen, Pause, Play } from "lucide-react";
+import { DoorOpen, Monitor, Pause, Play, PowerOff } from "lucide-react";
 import { roomsApi } from "../api/rooms";
+import { errorMessage } from "../api/client";
 import type { MyRoom } from "../api/types";
 import { sittingsApi } from "../api/sittings";
 import { monitorApi, type SessionSummary } from "../api/monitor";
 import ExamCountdown from "../components/ExamCountdown";
+import DisconnectAlerts from "../components/DisconnectAlerts";
 import { STATUS_LABEL } from "./monitor/constants";
 import { offlineLabel } from "../lib/offline";
 
@@ -22,8 +24,8 @@ export default function MyRoomsPage() {
         <DoorOpen size={22} /> Phòng của tôi
       </h1>
       <p className="text-sm text-slate-500 -mt-3">
-        Theo dõi thí sinh phòng bạn và <strong>tạm dừng / tiếp tục</strong> bài của từng em khi cần.
-        (Thí sinh do chủ tịch chia phòng sẵn.)
+        Theo dõi thí sinh phòng bạn, <strong>tạm dừng / tiếp tục</strong> bài của từng em, và
+        <strong> thoát phần mềm thi</strong> trên máy đã thi xong. (Thí sinh do chủ tịch chia phòng sẵn.)
       </p>
 
       {isLoading && <p className="text-slate-400">Đang tải…</p>}
@@ -53,6 +55,20 @@ function RoomBlock({ room }: { room: MyRoom }) {
   const invalidateSessions = () => qc.invalidateQueries({ queryKey: ["sessions", sittingId] });
   const pause = useMutation({ mutationFn: (id: string) => monitorApi.pauseSession(id), onSuccess: invalidateSessions });
   const resume = useMutation({ mutationFn: (id: string) => monitorApi.resumeSession(id), onSuccess: invalidateSessions });
+  // Thoát kiosk (AD-128). Máy nhận lệnh ở lần hỏi kế (~5s).
+  const quitOne = useMutation({
+    mutationFn: (id: string) => monitorApi.kioskQuitSession(id),
+    onSuccess: (r) => { if (!r.targeted) alert(r.detail || "Chưa biết máy của thí sinh này."); },
+    onError: (e) => alert(errorMessage(e)),
+  });
+  const quitRoom = useMutation({
+    mutationFn: () => roomsApi.kioskQuitRoom(room.room_id),
+    onSuccess: (r) => alert(
+      r.machines > 0
+        ? `Đã gửi lệnh thoát tới ${r.machines} máy. Các máy sẽ đóng phần mềm thi trong ~5 giây.`
+        : "Chưa có máy nào của phòng này từng đăng nhập nên chưa nhắm được máy nào."),
+    onError: (e) => alert(errorMessage(e)),
+  });
 
   const [filter, setFilter] = useState<RoomFilter>("all");
 
@@ -86,6 +102,15 @@ function RoomBlock({ room }: { room: MyRoom }) {
     }).length,
   };
 
+  // Mất kết nối: gom lên hộp cảnh báo đầu phòng (khỏi cuộn bảng tìm từng dòng).
+  const offlineRows = seatedAll
+    .map((c) => ({ c, s: sessByCand.get(c.candidate_id) }))
+    .filter(({ s }) => s?.offline)
+    .map(({ c, s }) => ({
+      key: s!.session_id, full_name: c.full_name, cccd: c.cccd,
+      room_name: null, last_seen_seconds: s!.last_seen_seconds,
+    }));
+
   // Mỗi box vừa hiển thị số, vừa là bộ lọc bảng bên dưới (bấm lại box đang chọn để bỏ lọc).
   const statBoxes: { key: RoomFilter; label: string; value: number; colorClass: string }[] = [
     { key: "all", label: "Đăng ký", value: stats.registered, colorClass: "text-slate-800" },
@@ -106,8 +131,26 @@ function RoomBlock({ room }: { room: MyRoom }) {
           {/* AD-124: nút "Thêm thí sinh" đã GỠ — giám thị chỉ Tạm dừng / Tiếp tục
               bài thi; danh sách dự thi là trách nhiệm của chủ tịch. */}
           <ExamCountdown endTime={room.cohort_end_time} serverTime={room.server_time} />
+          <button
+            onClick={() => {
+              if (confirm(
+                `Thoát phần mềm thi trên TẤT CẢ máy của ${room.room_name}?\n\n` +
+                "• Các máy sẽ đóng phần mềm thi và về màn hình Windows trong ~5 giây.\n" +
+                "• Thí sinh nào ĐANG LÀM BÀI sẽ bị văng khỏi bài thi (bài đã lưu vẫn còn).\n\n" +
+                "Chỉ dùng khi cả phòng đã nộp xong.",
+              )) quitRoom.mutate();
+            }}
+            disabled={quitRoom.isPending}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm text-slate-700 disabled:opacity-50"
+          >
+            <Monitor size={15} /> {quitRoom.isPending ? "Đang gửi…" : "Thoát máy cả phòng"}
+          </button>
         </div>
       </div>
+
+      {offlineRows.length > 0 && (
+        <div className="mb-3"><DisconnectAlerts rows={offlineRows} /></div>
+      )}
 
       {/* Per-room stat boxes (clickable filters) */}
       <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-3">
@@ -188,6 +231,24 @@ function RoomBlock({ room }: { room: MyRoom }) {
                       {s ? (STATUS_LABEL[s.status] || s.status) : <span className="text-slate-400">chưa đăng nhập</span>}
                     </td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
+                      {s && (
+                        <button
+                          onClick={() => {
+                            if (confirm(
+                              `Thoát phần mềm thi trên máy của ${row.full_name}?\n\n` +
+                              (s.status === "in_progress"
+                                ? "⚠ Thí sinh này ĐANG LÀM BÀI — sẽ bị văng khỏi bài thi (bài đã lưu vẫn còn).\n\n"
+                                : "") +
+                              "Máy sẽ đóng phần mềm thi và về màn hình Windows trong ~5 giây.",
+                            )) quitOne.mutate(s.session_id);
+                          }}
+                          disabled={quitOne.isPending}
+                          title="Đóng phần mềm thi trên máy của thí sinh này"
+                          className="inline-flex items-center gap-1 px-2 py-1 mr-1 rounded border border-slate-300 bg-white hover:bg-slate-50 text-xs text-slate-600 disabled:opacity-50"
+                        >
+                          <PowerOff size={14} /> Thoát máy
+                        </button>
+                      )}
                       {s?.status === "in_progress" && (
                         s.paused ? (
                           <button

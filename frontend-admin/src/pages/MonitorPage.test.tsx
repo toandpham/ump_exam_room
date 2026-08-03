@@ -19,7 +19,8 @@ vi.mock("../api/sittings", () => ({
   },
 }));
 vi.mock("../api/monitor", () => ({
-  monitorApi: { logout: vi.fn(), admit: vi.fn(), pauseSession: vi.fn(), resumeSession: vi.fn() },
+  monitorApi: { logout: vi.fn(), admit: vi.fn(), pauseSession: vi.fn(), resumeSession: vi.fn(),
+    kioskQuitSession: vi.fn() },
 }));
 
 const ROSTER = {
@@ -85,5 +86,26 @@ describe("MonitorPage — gate Bắt đầu thi (AD-110)", () => {
     await waitFor(() => expect(startBtn()).toBeTruthy());
     expect((startBtn() as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByText(/Vẫn bắt đầu/)).toBeNull();
+  });
+});
+
+
+// AD-128: hộp cảnh báo mất kết nối phải nổi lên ĐẦU trang — nhãn trong từng dòng
+// bị bỏ sót vì bảng vài trăm dòng phải cuộn mới thấy (phản ánh 02-08).
+describe("MonitorPage — cảnh báo mất kết nối", () => {
+  it("hiện hộp gom khi có thí sinh mất kết nối", async () => {
+    sessionsFn.mockResolvedValue([
+      sess({ status: "in_progress", full_name: "Mất Kết Nối", offline: true, last_seen_seconds: 200 }),
+      sess({ status: "in_progress", full_name: "Bình Thường", offline: false }),
+    ]);
+    mount();
+    await waitFor(() => expect(screen.getByText(/1 thí sinh đang MẤT KẾT NỐI/)).toBeTruthy());
+    expect(screen.getAllByText(/Mất Kết Nối/).length).toBeGreaterThan(0);
+  });
+
+  it("không hiện hộp khi mọi máy đều đang kết nối", async () => {
+    sessionsFn.mockResolvedValue([sess({ status: "in_progress", offline: false })]);
+    mount();
+    await waitFor(() => expect(screen.queryByText(/MẤT KẾT NỐI/)).toBeNull());
   });
 });

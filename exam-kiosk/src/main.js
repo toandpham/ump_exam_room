@@ -106,6 +106,8 @@ function setTaskMgr(disabled) { applyPolicies(disabled); }
 let win = null;
 let emergencyWin = null; // cửa sổ thoát khẩn cấp (sở hữu bởi main, độc lập trang thi)
 let stopPolling = null;
+// AD-128: mã máy của app thi (localStorage), để nhận lệnh thoát nhắm riêng máy này.
+let deviceId = "";
 let serverBase = null;   // http://<ip>
 let quitting = false;    // true khi đang thoát hợp lệ
 let perf = null;         // AD-103: bộ đo nghẽn tiến trình chính (perf.log trong userData)
@@ -305,13 +307,26 @@ async function proceed(ip) {
   loadExam();
 }
 
+// AD-128: đọc mã máy mà app thi lưu trong localStorage (cùng mã gửi qua header
+// X-Device-Id, nên khớp với device_id server ghi vào phiên thi). Nhờ vậy giám thị
+// đóng được đúng máy của một thí sinh. Fail-safe: đọc lỗi → để trống, chỉ mất khả
+// năng nhắm riêng máy, KHÔNG ảnh hưởng việc thi.
+function readDeviceId() {
+  if (!win || win.isDestroyed()) return;
+  win.webContents
+    .executeJavaScript('window.localStorage.getItem("exam_device_id")', true)
+    .then((v) => { if (typeof v === "string" && v) deviceId = v; })
+    .catch(() => { /* fail-safe */ });
+}
+
 function loadExam() {
   if (quitting || !win || win.isDestroyed() || !serverBase) return;
   win.loadURL(serverBase + cfg.path);
-  // Poll lệnh thoát/wipe từ server.
+  // Poll lệnh thoát/wipe từ server. Đọc deviceId ở thời điểm GỌI (không chốt lúc
+  // dựng) vì máy chỉ biết mã của mình sau khi trang thi nạp xong.
   if (stopPolling) stopPolling();
   stopPolling = startPolling({
-    getter: () => fetchCommand(serverBase),
+    getter: () => fetchCommand(serverBase, deviceId),
     intervalMs: cfg.controlPollMs,
     onQuit: quitKiosk,
     onWipe: wipeKiosk,
@@ -457,7 +472,10 @@ function createWindow() {
       send("kiosk:version", app.getVersion());
       runDiscovery();
     }
-    else if (serverBase && url.startsWith(serverBase)) failCount = 0; // nạp trang thi OK → reset đếm lỗi
+    else if (serverBase && url.startsWith(serverBase)) {
+      failCount = 0; // nạp trang thi OK → reset đếm lỗi
+      readDeviceId();
+    }
   });
 }
 

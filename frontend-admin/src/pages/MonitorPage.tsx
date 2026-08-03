@@ -8,6 +8,7 @@ import { errorMessage } from "../api/client";
 import type { Sitting } from "../api/types";
 import StatusBadge from "../components/StatusBadge";
 import ExamCountdown from "../components/ExamCountdown";
+import DisconnectAlerts from "../components/DisconnectAlerts";
 import SessionTable from "./monitor/SessionTable";
 import StatFilters from "./monitor/StatFilters";
 import StartExamControls from "./monitor/StartExamControls";
@@ -32,6 +33,16 @@ export default function MonitorPage() {
     enabled: !!selectedId,
     refetchInterval: 15000,
   });
+
+  // Mất kết nối: gom lên hộp cảnh báo đầu trang. Nhãn vẫn còn ở từng dòng, nhưng
+  // bảng vài trăm dòng thì phải cuộn mới thấy (phản ánh 02-08).
+  const offlineRows = useMemo(
+    () => sessions.filter((s: SessionSummary) => s.offline).map((s: SessionSummary) => ({
+      key: s.session_id, full_name: s.full_name, cccd: s.cccd,
+      room_name: s.room_name, last_seen_seconds: s.last_seen_seconds,
+    })),
+    [sessions],
+  );
 
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -117,6 +128,10 @@ export default function MonitorPage() {
           <StatusBadge status={sitting.status} hasRunningSessions={hasRunning} />
         </div>
       </div>
+
+      {offlineRows.length > 0 && (
+        <div className="mb-3"><DisconnectAlerts rows={offlineRows} /></div>
+      )}
 
       {!isActive && (
         <p className="mb-3 text-sm bg-slate-50 text-slate-700 border border-slate-200 px-3 py-2 rounded">

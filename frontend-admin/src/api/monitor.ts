@@ -55,6 +55,9 @@ export const monitorApi = {
     (await api.post(`/admin/sessions/${sessionId}/pause`)).data,
   resumeSession: async (sessionId: string) =>
     (await api.post(`/admin/sessions/${sessionId}/resume`)).data,
+  /** Thoát phần mềm thi trên đúng MÁY của một thí sinh (AD-128). */
+  kioskQuitSession: async (sessionId: string): Promise<{ targeted: boolean; detail?: string }> =>
+    (await api.post(`/admin/sessions/${sessionId}/kiosk-quit`)).data,
   logout: async (sessionId: string) =>
     (await api.post(`/admin/sessions/${sessionId}/logout`)).data,
   admit: async (sessionId: string) =>

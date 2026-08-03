@@ -40,7 +40,8 @@ export default function SectionDetailPage() {
   // AD-93: lệnh này ĐÓNG phần mềm thi trên mọi máy, trả về desktop Windows —
   // KHÔNG khởi động lại máy nữa (bỏ `shutdown /r` của AD-77c vì rủi ro restart nhầm
   // phòng đang thi). Máy nào còn chạy kiosk BẢN CŨ (≤1.2.0) thì vẫn restart cho tới
-  // khi tự cập nhật. Máy chủ vẫn chặn khi còn người đang làm bài (AD-92).
+  // khi tự cập nhật. AD-128: máy chủ KHÔNG còn chặn khi đang thi (yêu cầu vận hành
+  // 02-08 — phải dọn được máy treo giữa buổi); an toàn nằm ở hộp xác nhận dưới đây.
   const kioskQuitMut = useMutation({
     mutationFn: (force: boolean) => examsApi.kioskQuit(examId, force),
     onSuccess: () => alert("Đã gửi lệnh. Phần mềm thi trên các máy sẽ tự đóng trong ~5 giây."),
@@ -83,8 +84,8 @@ export default function SectionDetailPage() {
                       "Mọi máy thi của kỳ thi này sẽ tự ĐÓNG phần mềm thi trong khoảng 5 " +
                       "giây và trở về màn hình Windows (máy KHÔNG khởi động lại).\n\n" +
                       "⚠️ Máy nào chưa cập nhật phần mềm thi bản mới thì vẫn sẽ khởi động lại.\n\n" +
-                      "Dùng khi cả phòng đã nộp bài xong. Nếu còn thí sinh đang làm bài, " +
-                      "hệ thống sẽ từ chối.",
+                      "⚠️ Thí sinh nào ĐANG LÀM BÀI sẽ bị văng khỏi bài thi (bài đã lưu " +
+                      "vẫn còn). Nên dùng khi cả phòng đã nộp xong.",
                     )) kioskQuitMut.mutate(false);
                   }}
                   disabled={kioskQuitMut.isPending}

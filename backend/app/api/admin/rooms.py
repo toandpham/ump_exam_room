@@ -13,9 +13,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.admin._http import XLSX_MEDIA, attach as _attach
+from app.api.admin.monitor.control import KIOSK_QUIT_TTL_SECONDS
 from app.api.deps import exam_for_admin, require_roles
 from app.core.identifier import classify_identifier
 from app.core.limiter import client_ip
+from app.core.redis import redis_client
 from app.database import get_db
 from app.models import Admin, Candidate, Exam, ExamEvent, ExamSession, Room
 from app.models.enums import AdminRole, EventType, ExamStatus, SessionStatus
@@ -232,6 +234,40 @@ async def assign_rooms(
         "total": len(shuffled),
         "rooms": [{"room_id": str(r.id), "name": r.name, "count": count[r.id]} for r in rooms],
     }
+
+
+@router.post("/rooms/{room_id}/kiosk-quit")
+async def kiosk_quit_room(
+    room_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(_require_proctor_or_room),
+) -> dict:
+    """Thoát phần mềm thi trên MỌI máy của một phòng (AD-128).
+
+    Giám thị chỉ đóng được phòng mình (``_room_for_seating`` → 404 nếu không phải).
+    Cờ đặt theo ``device_id`` từng máy nên phòng bên cạnh không bị ảnh hưởng — đây
+    là điểm khác then chốt so với lệnh cấp cả kỳ thi.
+
+    Chỉ nhắm được máy đã từng có người đăng nhập (khi đó hệ thống mới biết máy nào
+    thuộc phòng này); ``machines`` trả về đúng số máy đã gửi để giao diện nói thật.
+    """
+    room = await _room_for_seating(db, room_id, admin)
+    devices = {
+        d for d in (await db.scalars(
+            select(ExamSession.device_id)
+            .join(Candidate, Candidate.id == ExamSession.candidate_id)
+            .where(Candidate.room_id == room.id, ExamSession.device_id.is_not(None))
+        )).all() if d
+    }
+    for dev in devices:
+        await redis_client.set(
+            session_service.kiosk_quit_device_key(dev), "1", ex=KIOSK_QUIT_TTL_SECONDS)
+    db.add(session_service.make_event(
+        event_type=EventType.EXAM_END.value,
+        metadata={"action": "kiosk_quit_room", "admin": admin.username,
+                  "room_id": str(room.id), "machines": len(devices)}))
+    await db.commit()
+    return {"machines": len(devices)}
 
 
 @router.get("/rooms/{room_id}/seating", response_model=list[RoomSeat])
