@@ -118,6 +118,35 @@ _BLOCK_TAGS = {"p", "div", "li", "ul", "ol", "tr", "table",
                "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"}
 
 
+# Số mũ / chỉ số dưới (AD-127). Đề y khoa viết `10<sup>9</sup>/L`, `HCO<sub>3</sub>`;
+# trước đây <sup>/<sub> bị coi là thẻ nội tuyến nên nối phẳng thành "109/L" — SAI về
+# y khoa. Đổi sang ký tự Unicode; màn thi chạy qua `sciText` (AD-122) để render
+# <sup>/<sub> chữ số ASCII, không phụ thuộc glyph font Windows 7.
+# ⚠️ Chỉ được thêm ký tự mà `frontend-exam/src/lib/sciText.tsx` đổi ngược lại được —
+# xem test_qti_superscript.py::test_backend_only_emits_characters...
+_SUP_MAP = {"0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶",
+            "7": "⁷", "8": "⁸", "9": "⁹", "+": "⁺", "-": "⁻", "=": "⁼",
+            "(": "⁽", ")": "⁾", "n": "ⁿ"}
+_SUB_MAP = {"0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆",
+            "7": "₇", "8": "₈", "9": "₉", "+": "₊", "-": "₋", "=": "₌",
+            "(": "₍", ")": "₎"}
+
+
+def _to_script(raw: str, kind: str) -> str:
+    """Chữ trong <sup>/<sub> → ký tự Unicode tương ứng.
+
+    Không đổi được (vd ``<sup>abc</sup>``) thì dùng ``^``/``_`` — xấu hơn nhưng vẫn
+    đọc ra nghĩa; điều CẤM là nối phẳng vào dòng, vì khi đó "10 mũ 9" thành "109".
+    """
+    table = _SUP_MAP if kind == "sup" else _SUB_MAP
+    s = " ".join(raw.split())
+    if not s:
+        return ""
+    if all(ch in table for ch in s):
+        return "".join(table[ch] for ch in s)
+    return ("^" if kind == "sup" else "_") + s
+
+
 def _norm_text(raw: str) -> str:
     """Chuẩn hoá 1 đoạn text: gộp khoảng trắng trong từng dòng, bỏ dòng trống →
     mỗi ý một dòng (\\n giữ nguyên; màn thi render whitespace-pre-wrap, AD-97)."""
@@ -156,6 +185,12 @@ def _extract_blocks(elem: ET.Element, root_dir: str) -> list[dict]:
             return
         if tag == "br":
             buf.append("\n")
+            if e.tail:
+                buf.append(e.tail)
+            return
+        if tag in ("sup", "sub"):
+            # Gộp cả thẻ lồng bên trong (vd <sup><strong>9</strong></sup>).
+            buf.append(_to_script("".join(e.itertext()), tag))
             if e.tail:
                 buf.append(e.tail)
             return

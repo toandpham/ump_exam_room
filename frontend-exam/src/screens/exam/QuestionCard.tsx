@@ -1,6 +1,7 @@
 import { memo, useState } from "react";
 import { ChevronLeft, ChevronRight, Flag, Send, SkipForward } from "lucide-react";
 import type { ExamQuestion } from "../../api/exam";
+import { sciText } from "../../lib/sciText";
 
 /** The centered question card: stem + images, the 4 options (positional A/B/C/D
  * labels per QTI — see note below), and the prev / jump-unanswered / next controls.
@@ -64,14 +65,14 @@ function QuestionCard({
                   loading="lazy" decoding="async" title="Bấm để phóng to"
                   className="max-h-72 rounded border cursor-zoom-in hover:opacity-90 my-3" />
               ) : (
-                <p key={i} className="text-slate-900 text-xl leading-relaxed font-medium whitespace-pre-wrap">{b.text}</p>
+                <p key={i} className="text-slate-900 text-xl leading-relaxed font-medium whitespace-pre-wrap">{sciText(b.text || "")}</p>
               )
             )}
           </div>
         ) : (
           <>
             {/* Câu hỏi: ưu tiên — chữ to, rõ (AD-69; nâng cỡ AD-125) */}
-            <p className="text-slate-900 text-xl leading-relaxed font-medium mb-4 whitespace-pre-wrap">{q.text}</p>
+            <p className="text-slate-900 text-xl leading-relaxed font-medium mb-4 whitespace-pre-wrap">{sciText(q.text)}</p>
             {q.images && q.images.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-5">
                 {q.images.map((src, i) => (
@@ -99,7 +100,7 @@ function QuestionCard({
               <button key={o.id} onClick={() => onSelect(q.id, o.id)}
                 className={`w-full text-left flex items-start gap-3 border rounded-lg px-3.5 py-2.5 text-base leading-relaxed transition ${selected ? "border-blue-600 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`}>
                 <span className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-sm font-bold ${selected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{label}</span>
-                <span className="flex-1 whitespace-pre-wrap">{o.text}</span>
+                <span className="flex-1 whitespace-pre-wrap">{sciText(o.text)}</span>
                 {o.images && o.images.length > 0 && (
                   <span className="flex flex-wrap gap-1 shrink-0">
                     {o.images.map((src, i) => (

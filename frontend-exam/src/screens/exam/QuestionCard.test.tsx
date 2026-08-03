@@ -115,3 +115,51 @@ describe("QuestionCard", () => {
     expect(getByTitle("Bỏ đánh dấu câu này")).toBeTruthy();
   });
 });
+
+// AD-127: số mũ trong đề phải render bằng <sup>/<sub> chữ số ASCII. Ký tự Unicode
+// ⁹ ₃ ⁻ không có glyph trong font Windows 7 (máy thi) → để nguyên là ra ô vuông.
+describe("QuestionCard — số mũ / chỉ số dưới", () => {
+  const supQ: ExamQuestion = {
+    ...Q,
+    text: "Bạch cầu 12.5 x 10⁹/L, HCO₃⁻ 18 mmol/L?",
+    options: [
+      { id: "A", text: "10¹²/L", images: [] },
+      { id: "B", text: "Bình thường", images: [] },
+      { id: "C", text: "Thấp", images: [] },
+      { id: "D", text: "Cao", images: [] },
+    ],
+  };
+
+  it("renders exponents in the stem as <sup>/<sub> with ASCII digits", () => {
+    const { container } = render(
+      <QuestionCard q={supQ} index={0} total={1} answers={{}} unansweredCount={0}
+        flagged={false} onToggleFlag={noop} onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+    );
+    expect(container.querySelector("sup")?.textContent).toBe("9");
+    expect(container.querySelector("sub")?.textContent).toBe("3");
+    // Ký tự Unicode gốc KHÔNG được lọt ra DOM (Win7 hiện ô vuông).
+    expect(container.textContent).not.toContain("⁹");
+    expect(container.textContent).not.toContain("₃");
+  });
+
+  it("renders exponents in option text too", () => {
+    const { container } = render(
+      <QuestionCard q={supQ} index={0} total={1} answers={{}} unansweredCount={0}
+        flagged={false} onToggleFlag={noop} onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+    );
+    const sups = [...container.querySelectorAll("sup")].map((s) => s.textContent);
+    expect(sups).toContain("12");
+    expect(container.textContent).not.toContain("¹²");
+  });
+
+  it("renders exponents inside ordered blocks (đề nạp mới)", () => {
+    const blockQ: ExamQuestion = {
+      ...Q, text: "", blocks: [{ type: "text", text: "Tiểu cầu 250 x 10⁹/L" }],
+    };
+    const { container } = render(
+      <QuestionCard q={blockQ} index={0} total={1} answers={{}} unansweredCount={0}
+        flagged={false} onToggleFlag={noop} onSelect={noop} onPrev={noop} onNext={noop} onJumpUnanswered={noop} onSubmit={noop} />,
+    );
+    expect(container.querySelector("sup")?.textContent).toBe("9");
+  });
+});
