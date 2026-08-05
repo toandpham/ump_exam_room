@@ -2,6 +2,7 @@ import { memo, useState } from "react";
 import { ChevronLeft, ChevronRight, Flag, Send, SkipForward } from "lucide-react";
 import type { ExamQuestion } from "../../api/exam";
 import { sciText } from "../../lib/sciText";
+import ImageLightbox from "./ImageLightbox";
 
 /** The centered question card: stem + images, the 4 options (positional A/B/C/D
  * labels per QTI — see note below), and the prev / jump-unanswered / next controls.
@@ -160,19 +161,9 @@ function QuestionCard({
         )}
       </button>
 
-      {/* Lightbox phóng to ảnh — bấm nền để đóng */}
+      {/* Xem ảnh phóng to: nhiều mức, kéo chuột để xem vùng cần, có nút Đóng (AD-135). */}
       {zoom && (
-        <div
-          className="fixed inset-0 z-50 bg-black/85 grid place-items-center p-4 cursor-zoom-out"
-          onClick={() => setZoom(null)}
-        >
-          {/* AD-109: bản nhỏ hiện NGAY (đã giải nén sẵn); bản đầy đủ đè lên khi tải
-              xong. Cùng ô grid nên chồng khít, không nhảy layout. */}
-          <img src={zoom.thumb} className="col-start-1 row-start-1 max-h-full max-w-full rounded shadow-2xl" />
-          {zoom.full !== zoom.thumb && (
-            <img src={zoom.full} className="col-start-1 row-start-1 max-h-full max-w-full rounded" />
-          )}
-        </div>
+        <ImageLightbox full={zoom.full} thumb={zoom.thumb} onClose={() => setZoom(null)} />
       )}
     </div>
   );
