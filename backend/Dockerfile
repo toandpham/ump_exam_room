@@ -6,10 +6,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# curl is used by the container healthcheck.
-# curl for healthcheck; fonts-dejavu-core gives a Unicode TTF for Vietnamese PDFs.
+# curl for healthcheck; fonts-dejavu-core gives a Unicode TTF for Vietnamese PDFs;
+# postgresql-client cho nút "Sao lưu ngay" ở trang quản trị (pg_dump). Client mới
+# hơn máy chủ là hợp lệ (17 dump được server 16); ngược lại mới không được.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl fonts-dejavu-core \
+    && apt-get install -y --no-install-recommends curl fonts-dejavu-core postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies first (better layer caching), then the app package.

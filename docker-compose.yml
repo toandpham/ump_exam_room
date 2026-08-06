@@ -70,6 +70,9 @@ services:
     env_file: .env
     volumes:
       - ./backend:/app
+      # Thư mục sao lưu (dùng chung với scripts/backup.sh chạy trên máy chủ) — để
+      # trang quản trị liệt kê / tải về / tạo bản mới.
+      - ./backups:/backups
       # (AD-75: đã bỏ bind mount /Volumes — di sản USB-scan gỡ từ AD-27; giữ lại
       # làm `docker compose up` FAIL trên Linux vì /Volumes không tồn tại.)
     ports:

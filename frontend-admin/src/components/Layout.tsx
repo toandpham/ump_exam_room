@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { BadgeCheck,
+import { BadgeCheck, DatabaseBackup,
   DownloadCloud, ChevronLeft, ChevronRight, ClipboardList, DoorOpen, KeyRound, LayoutDashboard, LogOut, ScrollText, Users2 } from "lucide-react";
 import { errorMessage } from "../api/client";
 import { authApi } from "../api/auth";
@@ -25,6 +25,7 @@ const SUPER_NAV = [
   { to: "/exams", label: "Kỳ thi", icon: ClipboardList },
   { to: "/audit", label: "Nhật ký", icon: ScrollText },
   { to: "/admins", label: "Tài khoản", icon: Users2 },
+  { to: "/backups", label: "Sao lưu", icon: DatabaseBackup },
   { to: "/license", label: "Giấy phép", icon: BadgeCheck },
   { to: "/update", label: "Cập nhật", icon: DownloadCloud },
 ];

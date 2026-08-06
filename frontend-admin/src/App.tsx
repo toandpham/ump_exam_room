@@ -13,6 +13,7 @@ import CandidatesPage from "./pages/CandidatesPage";
 import MonitorPage from "./pages/MonitorPage";
 import ReportsPage from "./pages/ReportsPage";
 import CollusionPage from "./pages/CollusionPage";
+import BackupsPage from "./pages/BackupsPage";
 import MyRoomsPage from "./pages/MyRoomsPage";
 import AdminsPage from "./pages/AdminsPage";
 import AuditLogPage from "./pages/AuditLogPage";
@@ -43,6 +44,7 @@ export default function App() {
           <Route path="/update" element={<UpdatePage />} />
           <Route path="/audit" element={<AuditLogPage />} />
           <Route path="/license" element={<LicensePage />} />
+          <Route path="/backups" element={<BackupsPage />} />
           {/* Sitting detail (buổi) — its own layout with Đề thi / Giám sát / Báo cáo */}
           <Route path="/exams/:examId/sittings/:sittingId" element={<SittingDetailPage />}>
             <Route index element={<Navigate to="exam" replace />} />
