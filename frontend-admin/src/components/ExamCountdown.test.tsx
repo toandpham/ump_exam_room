@@ -48,3 +48,41 @@ describe("ExamCountdown", () => {
     expect(container.textContent).toContain("00:59");
   });
 });
+
+describe("ExamCountdown — mỗi người một đồng hồ (AD-121 #3)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("có người thi lâu hơn → hiện cả mốc sớm nhất lẫn người cuối", () => {
+    // Nhãn "thời gian thi" mà chỉ đọc mốc sớm nhất khiến chủ tịch tưởng cả phòng
+    // sắp hết giờ, trong khi người vào trễ / được cộng giờ vẫn còn làm.
+    vi.setSystemTime(new Date("2026-07-14T12:00:00Z"));
+    const { container } = render(
+      <ExamCountdown endTime="2026-07-14T12:10:00Z" lastEndTime="2026-07-14T12:40:00Z"
+        serverTime="2026-07-14T12:00:00Z" />,
+    );
+    expect(container.textContent).toContain("Sớm nhất");
+    expect(container.textContent).toContain("10:00");
+    expect(container.textContent).toContain("người cuối");
+    expect(container.textContent).toContain("40:00");
+  });
+
+  it("cả phòng cùng giờ → giữ nguyên một dòng như cũ", () => {
+    vi.setSystemTime(new Date("2026-07-14T12:00:00Z"));
+    const { container } = render(
+      <ExamCountdown endTime="2026-07-14T12:30:00Z" lastEndTime="2026-07-14T12:30:00Z"
+        serverTime="2026-07-14T12:00:00Z" />,
+    );
+    expect(container.textContent).toContain("Thời gian thi");
+    expect(container.textContent).not.toContain("người cuối");
+  });
+
+  it("lệch vài giây (làm tròn) thì không bày thêm chữ", () => {
+    vi.setSystemTime(new Date("2026-07-14T12:00:00Z"));
+    const { container } = render(
+      <ExamCountdown endTime="2026-07-14T12:30:00Z" lastEndTime="2026-07-14T12:30:30Z"
+        serverTime="2026-07-14T12:00:00Z" />,
+    );
+    expect(container.textContent).not.toContain("người cuối");
+  });
+});

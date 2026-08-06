@@ -12,7 +12,11 @@ export interface SessionSummary {
   photo_path: string | null;
   status: string;
   submitted_at: string | null;
+  /** Mốc hết giờ RIÊNG của thí sinh này (đồng hồ là per-candidate, AD-47). */
+  end_time: string | null;
   paused: boolean;
+  /** Đang tạm dừng VÀ đã quá end_time — bài sẽ không bao giờ tự nộp (AD-121 #2). */
+  overdue_paused: boolean;
   self_registered: boolean;
   room_id: string | null;
   room_name: string | null;
@@ -46,6 +50,8 @@ export interface RosterResponse {
   not_logged_in: RosterCandidate[];
   // Đồng hồ thi chung (AD-78): deadline sớm nhất trong các phiên đang làm + giờ server.
   earliest_end_time: string | null;
+  /** Mốc của người kết thúc muộn nhất (vào trễ / cộng giờ riêng). */
+  latest_end_time: string | null;
   server_time: string | null;
 }
 

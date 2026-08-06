@@ -218,7 +218,7 @@ async def test_questions_serve_static_url_then_wiped(client, factory):
     assert all("correct_option" not in q for q in qs)
 
     # Đóng buổi → ảnh tĩnh bị xoá sạch.
-    assert (await client.post(f"/api/admin/sittings/{sitting.id}/end", headers=auth(ptok))).status_code == 200
+    assert (await client.post(f"/api/admin/sittings/{sitting.id}/end?force=true", headers=auth(ptok))).status_code == 200
     assert not (Path(settings.upload_dir) / f"sitting_{sitting.id.hex}").exists()
 
 

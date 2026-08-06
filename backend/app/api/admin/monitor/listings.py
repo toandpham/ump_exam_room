@@ -125,6 +125,7 @@ async def list_sessions(
                     SessionStatus.IN_PROGRESS.value}
     beats = await device_lock.get_active_many([c.id for _, c, _ in rows_list])
     seen_by_idx = {i: device_lock.seconds_since_seen(b) for i, b in enumerate(beats)}
+    now = datetime.now(timezone.utc)
     return [
         SessionSummary(
             session_id=s.id, candidate_id=c.id, cccd=c.cccd, full_name=c.full_name,
@@ -136,6 +137,8 @@ async def list_sessions(
             device_id=s.device_id,
             self_registered=c.self_registered,
             paused=s.paused_at is not None,
+            overdue_paused=(s.paused_at is not None
+                            and s.end_time is not None and s.end_time < now),
             room_id=c.room_id, room_name=room_name,
             preloaded=preloaded_by_idx.get(i, False),
             info_disputed=c.info_disputed_at is not None,
@@ -175,13 +178,21 @@ async def sitting_roster(
         .order_by(Candidate.full_name)
     )).all()
 
-    earliest_end_time = await db.scalar(
-        select(func.min(ExamSession.end_time)).where(
-            ExamSession.sitting_id == sitting_id,
-            ExamSession.status == SessionStatus.IN_PROGRESS.value,
-            ExamSession.end_time.is_not(None),
-        )
+    # Mốc đếm ngược: BỎ phiên đang tạm dừng — đồng hồ của họ đóng băng tại paused_at
+    # nên end_time cũ không phản ánh thời gian thực của ai; để lẫn vào thì đồng hồ
+    # chung bị kéo xuống theo người đã dừng (lỗ AD-121 #3). Trả cả hai đầu vì khi có
+    # người vào trễ / được cộng giờ riêng thì "sớm nhất" KHÔNG phải là lúc cả phòng
+    # hết giờ, mà giao diện lại ghi "thời gian thi còn lại".
+    running_clock = (
+        ExamSession.sitting_id == sitting_id,
+        ExamSession.status == SessionStatus.IN_PROGRESS.value,
+        ExamSession.paused_at.is_(None),
+        ExamSession.end_time.is_not(None),
     )
+    earliest_end_time, latest_end_time = (await db.execute(
+        select(func.min(ExamSession.end_time), func.max(ExamSession.end_time))
+        .where(*running_clock)
+    )).one()
 
     return RosterResponse(
         sitting=RosterSitting(
@@ -195,6 +206,7 @@ async def sitting_roster(
         logged_in=logged_in,
         not_logged_in_total=len(pending),
         earliest_end_time=earliest_end_time,
+        latest_end_time=latest_end_time,
         server_time=datetime.now(timezone.utc),
         not_logged_in=[
             RosterCandidate(

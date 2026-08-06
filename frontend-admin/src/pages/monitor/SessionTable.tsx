@@ -76,7 +76,14 @@ function Row({ stt, s, onLogout, onAdmit, onPause, onResume, hasRunning }: {
       <td className="px-3 py-2">
         <span className={isAbsent ? "text-slate-400" : ""}>{s.full_name}</span>
         {isAbsent && <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-slate-200 text-slate-500">Vắng</span>}
-        {s.paused && <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">tạm dừng</span>}
+        {s.paused && (
+          s.overdue_paused
+            ? <span title="Đang tạm dừng và đã quá giờ — bài này sẽ KHÔNG tự nộp cho tới khi bấm Tiếp tục"
+                className="ml-2 text-xs px-1.5 py-0.5 rounded bg-amber-500 text-white font-semibold">
+                ⏸ tạm dừng — ĐÃ QUÁ GIỜ
+              </span>
+            : <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">tạm dừng</span>
+        )}
         {/* AD-122: thí sinh báo sai thông tin — vào tab Thí sinh sửa, nhãn tự tắt. */}
         {/* AD-122: máy im lặng >90s. Chỉ hiện khi phiên còn CẦN online (backend
             đã lọc) — nộp xong tắt máy đi về là bình thường, không báo. */}

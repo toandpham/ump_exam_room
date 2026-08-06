@@ -9,6 +9,7 @@ import type { Sitting } from "../api/types";
 import StatusBadge from "../components/StatusBadge";
 import ExamCountdown from "../components/ExamCountdown";
 import DisconnectAlerts from "../components/DisconnectAlerts";
+import StuckPausedAlerts from "../components/StuckPausedAlerts";
 import SessionTable from "./monitor/SessionTable";
 import StatFilters from "./monitor/StatFilters";
 import StartExamControls from "./monitor/StartExamControls";
@@ -40,6 +41,13 @@ export default function MonitorPage() {
     () => sessions.filter((s: SessionSummary) => s.offline).map((s: SessionSummary) => ({
       key: s.session_id, full_name: s.full_name, cccd: s.cccd,
       room_name: s.room_name, last_seen_seconds: s.last_seen_seconds,
+    })),
+    [sessions],
+  );
+  // Tạm dừng mà đã quá giờ: vòng quét tự nộp bỏ qua họ nên bài treo mãi (AD-121 #2).
+  const stuckRows = useMemo(
+    () => sessions.filter((s: SessionSummary) => s.overdue_paused).map((s: SessionSummary) => ({
+      key: s.session_id, full_name: s.full_name, cccd: s.cccd, room_name: s.room_name,
     })),
     [sessions],
   );
@@ -124,13 +132,19 @@ export default function MonitorPage() {
           Giám sát <Wifi size={16} className="text-green-500" />
         </h2>
         <div className="flex items-center gap-3">
-          <ExamCountdown endTime={roster?.earliest_end_time ?? null} serverTime={roster?.server_time ?? null} />
+          <ExamCountdown endTime={roster?.earliest_end_time ?? null}
+            lastEndTime={roster?.latest_end_time ?? null}
+            serverTime={roster?.server_time ?? null} />
           <StatusBadge status={sitting.status} hasRunningSessions={hasRunning} />
         </div>
       </div>
 
       {offlineRows.length > 0 && (
         <div className="mb-3"><DisconnectAlerts rows={offlineRows} /></div>
+      )}
+
+      {stuckRows.length > 0 && (
+        <div className="mb-3"><StuckPausedAlerts rows={stuckRows} /></div>
       )}
 
       {!isActive && (
