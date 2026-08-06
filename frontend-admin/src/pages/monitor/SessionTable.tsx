@@ -1,16 +1,22 @@
-import { LogOut, Pause, Play, UserCheck } from "lucide-react";
+import { Ban, Clock, LogOut, Pause, Play, UserCheck } from "lucide-react";
 import type { RosterCandidate, SessionSummary } from "../../api/monitor";
 import { offlineLabel } from "../../lib/offline";
 import { STATUS_LABEL, type DisplayRow } from "./constants";
 
 /** Bảng thí sinh hợp nhất: dòng đã đăng nhập (có phiên, kèm thao tác) và dòng
  * chưa đăng nhập (roster). Cột STT đánh số 1-based theo thứ tự dòng. */
-export default function SessionTable({ rows, onLogout, onAdmit, onPause, onResume, hasRunning }: {
+export default function SessionTable({
+  rows, onLogout, onAdmit, onPause, onResume, onExtend, onTerminate, hasRunning,
+}: {
   rows: DisplayRow[];
   onLogout: (s: SessionSummary) => void;
   onAdmit: (s: SessionSummary) => void;
   onPause?: (s: SessionSummary) => void;
   onResume?: (s: SessionSummary) => void;
+  /** Cộng giờ riêng cho thí sinh này (chủ tịch). */
+  onExtend?: (s: SessionSummary) => void;
+  /** Đình chỉ thi thí sinh này (chủ tịch). */
+  onTerminate?: (s: SessionSummary) => void;
   /** true khi đã có ít nhất 1 phiên in_progress — dùng để bật nút Duyệt vào thi
    * cho thí sinh ready đi trễ xác nhận sau khi buổi đã bắt đầu. */
   hasRunning?: boolean;
@@ -33,6 +39,8 @@ export default function SessionTable({ rows, onLogout, onAdmit, onPause, onResum
               onLogout={() => onLogout(r.s)} onAdmit={() => onAdmit(r.s)}
               onPause={onPause ? () => onPause(r.s) : undefined}
               onResume={onResume ? () => onResume(r.s) : undefined}
+              onExtend={onExtend ? () => onExtend(r.s) : undefined}
+              onTerminate={onTerminate ? () => onTerminate(r.s) : undefined}
               hasRunning={hasRunning} />
           ) : (
             <PendingRow key={r.c.candidate_id} stt={i + 1} c={r.c} />
@@ -57,11 +65,12 @@ function PendingRow({ stt, c }: { stt: number; c: RosterCandidate }) {
   );
 }
 
-function Row({ stt, s, onLogout, onAdmit, onPause, onResume, hasRunning }: {
+function Row({ stt, s, onLogout, onAdmit, onPause, onResume, onExtend, onTerminate, hasRunning }: {
   stt: number;
   s: SessionSummary;
   onLogout: () => void; onAdmit: () => void;
   onPause?: () => void; onResume?: () => void;
+  onExtend?: () => void; onTerminate?: () => void;
   hasRunning?: boolean;
 }) {
   const isAbsent = s.status === "absent";
@@ -91,6 +100,12 @@ function Row({ stt, s, onLogout, onAdmit, onPause, onResume, hasRunning }: {
           <span title="Máy này đã ngừng gọi về máy chủ — kiểm tra mạng/máy của thí sinh"
             className="ml-2 text-xs px-1.5 py-0.5 rounded bg-slate-700 text-white font-semibold">
             ⚡ {offlineLabel(s.last_seen_seconds)}
+          </span>
+        )}
+        {s.status === "terminated" && (
+          <span title={s.terminated_reason || "Chủ tịch đã đình chỉ thi"}
+            className="ml-2 text-xs px-1.5 py-0.5 rounded bg-rose-600 text-white font-semibold">
+            ⛔ Đình chỉ
           </span>
         )}
         {s.info_disputed && (
@@ -145,6 +160,20 @@ function Row({ stt, s, onLogout, onAdmit, onPause, onResume, hasRunning }: {
               </button>
             )
           )
+        )}
+        {s.status === "in_progress" && onExtend && (
+          <button title="Cộng giờ riêng cho thí sinh này (máy treo/hỏng) — không ảnh hưởng cả phòng"
+            onClick={onExtend}
+            className="inline-flex items-center gap-1 px-2 py-1 mr-2 rounded border border-blue-300 bg-blue-50 hover:bg-blue-100 text-xs text-blue-700">
+            <Clock size={14} /> Cộng giờ
+          </button>
+        )}
+        {s.status === "in_progress" && onTerminate && (
+          <button title="Đình chỉ thi: dừng hẳn bài và chấm với những gì đã làm"
+            onClick={onTerminate}
+            className="inline-flex items-center gap-1 px-2 py-1 mr-2 rounded border border-rose-300 bg-rose-50 hover:bg-rose-100 text-xs text-rose-700">
+            <Ban size={14} /> Đình chỉ
+          </button>
         )}
         {!isAbsent && (
           <button title="Đăng xuất khỏi thiết bị (để đổi máy)" onClick={onLogout}

@@ -5,11 +5,25 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ExtendRequest(BaseModel):
     minutes: int = Field(ge=1, le=180)
+
+
+class TerminateRequest(BaseModel):
+    """Đình chỉ thi một thí sinh. Lý do BẮT BUỘC — đây là quyết định kỷ luật, hội
+    đồng phải tra lại được vì sao; ``min_length`` sau khi cắt khoảng trắng."""
+    reason: str = Field(min_length=3, max_length=255)
+
+    @field_validator("reason")
+    @classmethod
+    def _trim(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if len(v) < 3:
+            raise ValueError("Lý do đình chỉ quá ngắn.")
+        return v
 
 
 class StartResult(BaseModel):
@@ -46,6 +60,8 @@ class SessionSummary(BaseModel):
     # tục thì phiên nằm đó mãi. Cờ này để bảng giám sát làm nó nổi lên thay vì im
     # lặng treo (lỗ AD-121 #2).
     overdue_paused: bool = False
+    # Lý do chủ tịch đình chỉ thi (khi status = "terminated").
+    terminated_reason: str | None = None
     room_id: uuid.UUID | None = None
     room_name: str | None = None
     # AD-122: thí sinh đã bấm "Báo giám thị" (sai thông tin) và CHƯA được sửa.

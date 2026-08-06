@@ -13,7 +13,7 @@ from app.api.deps import get_current_candidate
 from app.core.redis import redis_client
 from app.database import get_db
 from app.models import Answer, Candidate, ExamSession, Sitting
-from app.models.enums import EventType, SessionStatus
+from app.models.enums import FINALISED_STATUSES, EventType, SessionStatus
 from app.schemas.answer import (
     AnswerIn,
     AnswerOut,
@@ -87,8 +87,8 @@ async def get_questions(
     session = await _current_session(db, candidate)
     # SP-2b: cho tải đề ở trạng thái READY (prefetch trước giờ) — vẫn ẩn correct_option,
     # time_remaining=None (đồng hồ chỉ chạy khi IN_PROGRESS). WAITING vẫn bị chặn.
-    if session.status not in {SessionStatus.READY.value, SessionStatus.IN_PROGRESS.value,
-                              SessionStatus.SUBMITTED.value, SessionStatus.TIMEOUT.value}:
+    if session.status not in ({SessionStatus.READY.value, SessionStatus.IN_PROGRESS.value}
+                              | FINALISED_STATUSES):
         raise HTTPException(status.HTTP_409_CONFLICT, "Chưa đến giờ làm bài.")
 
     # Tự nạp lại đề nếu Redis payload đã hết TTL giữa buổi (mở sớm/cộng giờ/vào trễ)
@@ -336,7 +336,7 @@ async def get_result(
         )
         if session is None:
             raise HTTPException(status.HTTP_409_CONFLICT, "Chưa có phiên thi. Hãy xác nhận thông tin.")
-    if session.status not in {SessionStatus.SUBMITTED.value, SessionStatus.TIMEOUT.value}:
+    if session.status not in FINALISED_STATUSES:
         raise HTTPException(status.HTTP_409_CONFLICT, "Chưa có kết quả — bạn chưa nộp bài.")
     answered = len(list(await db.scalars(
         select(Answer).where(Answer.session_id == session.id, Answer.selected_option.is_not(None))

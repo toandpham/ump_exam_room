@@ -3,6 +3,7 @@ import type { RosterCandidate, SessionSummary } from "../../api/monitor";
 export const STATUS_LABEL: Record<string, string> = {
   waiting: "Chờ", ready: "Sẵn sàng", in_progress: "Đang làm", submitted: "Đã nộp", timeout: "Hết giờ",
   absent: "Vắng",
+  terminated: "Đình chỉ",
 };
 
 // Only the values StatFilters can actually set (the four meta filters plus the

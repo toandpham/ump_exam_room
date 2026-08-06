@@ -29,9 +29,25 @@ class SessionStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     SUBMITTED = "submitted"
     TIMEOUT = "timeout"
+    # Chủ tịch đình chỉ thi giữa chừng (bắt gian lận, vi phạm quy chế). Bài ĐƯỢC
+    # CHẤM với những gì đã làm và niêm phong như mọi bài khác — trạng thái riêng chỉ
+    # để hội đồng phân biệt được trong báo cáo và nhật ký, lý do lưu ở
+    # ``exam_sessions.terminated_reason``.
+    TERMINATED = "terminated"
     # (Trạng thái "absent" đã gỡ — refactor đợt 3. Vắng nay tính ở BÁO CÁO cho thí
     # sinh KHÔNG có phiên; report_service dùng literal "absent" tổng hợp, không cần
     # enum. DB dev cũ có thể còn vài dòng status='absent' — cột là String, vô hại.)
+
+
+# Bài đã chốt: không còn làm được nữa, đã có điểm + niêm phong. Định nghĩa MỘT chỗ
+# vì mọi nơi hỏi "đã xong chưa" phải trả lời giống nhau — trước đây tập này được
+# viết tay lặp lại ở 5 file, nên thêm một trạng thái là chắc chắn sót chỗ (thí sinh
+# bị đình chỉ sẽ không xem được kết quả, hoặc biến mất khỏi báo cáo).
+FINALISED_STATUSES = frozenset({
+    SessionStatus.SUBMITTED.value,
+    SessionStatus.TIMEOUT.value,
+    SessionStatus.TERMINATED.value,
+})
 
 
 class AdminRole(str, Enum):
@@ -58,6 +74,7 @@ class EventType(str, Enum):
     PAUSE = "pause"                         # per-candidate pause (AD-47)
     RESUME = "resume"                       # per-candidate resume (AD-47)
     TIMEOUT_SUBMIT = "timeout_submit"       # auto-submit when a candidate's own clock hits 0 (AD-47)
+    TERMINATED = "terminated"               # chủ tịch đình chỉ thi 1 thí sinh (có lý do)
     TAB_CHANGE = "tab_change"
     SUBMIT = "submit"
     EMERGENCY_ADD = "emergency_add"

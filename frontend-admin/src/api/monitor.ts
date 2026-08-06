@@ -15,6 +15,8 @@ export interface SessionSummary {
   /** Mốc hết giờ RIÊNG của thí sinh này (đồng hồ là per-candidate, AD-47). */
   end_time: string | null;
   paused: boolean;
+  /** Lý do bị đình chỉ thi (status = 'terminated'). */
+  terminated_reason: string | null;
   /** Đang tạm dừng VÀ đã quá end_time — bài sẽ không bao giờ tự nộp (AD-121 #2). */
   overdue_paused: boolean;
   self_registered: boolean;
@@ -68,4 +70,10 @@ export const monitorApi = {
     (await api.post(`/admin/sessions/${sessionId}/logout`)).data,
   admit: async (sessionId: string) =>
     (await api.post(`/admin/sessions/${sessionId}/admit`)).data,
+  /** Cộng giờ cho RIÊNG một thí sinh (máy treo/hỏng) — không đụng cả phòng. */
+  extendSession: async (sessionId: string, minutes: number) =>
+    (await api.post(`/admin/sessions/${sessionId}/extend`, { minutes })).data,
+  /** Đình chỉ thi: dừng hẳn bài, chấm với những gì đã làm. Lý do bắt buộc. */
+  terminateSession: async (sessionId: string, reason: string) =>
+    (await api.post(`/admin/sessions/${sessionId}/terminate`, { reason })).data,
 };

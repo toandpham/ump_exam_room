@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import room_ids_for_proctor, sitting_for_admin
 from app.database import get_db
 from app.models import Admin, Answer, Candidate, Exam, ExamEvent, ExamSession, Room, Sitting
-from app.models.enums import AdminRole, EventType, SessionStatus
+from app.models.enums import FINALISED_STATUSES, AdminRole, EventType, SessionStatus
 from app.schemas.monitor import (
     RosterCandidate,
     RosterResponse,
@@ -48,8 +48,7 @@ async def check_integrity(
     sessions = list(await db.scalars(
         select(ExamSession).where(
             ExamSession.sitting_id == sitting.id,
-            ExamSession.status.in_({SessionStatus.SUBMITTED.value,
-                                    SessionStatus.TIMEOUT.value}),
+            ExamSession.status.in_(FINALISED_STATUSES),
         )
     ))
     ok = 0
@@ -139,6 +138,7 @@ async def list_sessions(
             paused=s.paused_at is not None,
             overdue_paused=(s.paused_at is not None
                             and s.end_time is not None and s.end_time < now),
+            terminated_reason=s.terminated_reason,
             room_id=c.room_id, room_name=room_name,
             preloaded=preloaded_by_idx.get(i, False),
             info_disputed=c.info_disputed_at is not None,

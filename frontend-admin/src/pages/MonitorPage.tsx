@@ -97,6 +97,18 @@ export default function MonitorPage() {
     onSuccess: () => { invalidate(); flash("▶ Đã tiếp tục bài thi của thí sinh."); },
     onError: () => flash("Tiếp tục thất bại.", "err"),
   });
+  const extendCand = useMutation({
+    mutationFn: ({ id, minutes }: { id: string; minutes: number }) =>
+      monitorApi.extendSession(id, minutes),
+    onSuccess: (_r, v) => { invalidate(); flash(`⏱ Đã cộng ${v.minutes} phút cho thí sinh này.`); },
+    onError: (e) => flash(errorMessage(e, "Cộng giờ thất bại"), "err"),
+  });
+  const terminateCand = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      monitorApi.terminateSession(id, reason),
+    onSuccess: () => { invalidate(); flash("⛔ Đã đình chỉ thi — bài được chấm với phần đã làm."); },
+    onError: (e) => flash(errorMessage(e, "Đình chỉ thất bại"), "err"),
+  });
   const pauseAll = useMutation({ mutationFn: () => sittingsApi.pauseAll(selectedId) });
   const resumeAll = useMutation({ mutationFn: () => sittingsApi.resumeAll(selectedId) });
 
@@ -213,6 +225,28 @@ export default function MonitorPage() {
         onAdmit={(s: SessionSummary) => { if (confirm(`Duyệt "${s.full_name}" vào thi?\n\nThí sinh đi trễ sẽ vào làm bài NGAY. Màn hình của họ tự vào đề sau vài giây.`)) admitCand.mutate(s.session_id); }}
         onPause={(s: SessionSummary) => pauseCand.mutate(s.session_id)}
         onResume={(s: SessionSummary) => resumeCand.mutate(s.session_id)}
+        onExtend={(s: SessionSummary) => {
+          const raw = prompt(`Cộng thêm bao nhiêu phút cho "${s.full_name}"?\n\n`
+            + "Chỉ thí sinh này được thêm giờ — cả phòng không đổi.", "10");
+          if (raw === null) return;
+          const minutes = Number(raw.trim());
+          if (!Number.isInteger(minutes) || minutes < 1 || minutes > 180) {
+            flash("Số phút phải là số nguyên từ 1 đến 180.", "err");
+            return;
+          }
+          extendCand.mutate({ id: s.session_id, minutes });
+        }}
+        onTerminate={(s: SessionSummary) => {
+          const reason = prompt(`ĐÌNH CHỈ THI "${s.full_name}"?\n\n`
+            + "Bài sẽ dừng hẳn và được chấm với những gì đã làm. Không hoàn tác được.\n\n"
+            + "Nhập lý do (bắt buộc, sẽ lưu vào nhật ký):", "");
+          if (reason === null) return;
+          if (reason.trim().length < 3) {
+            flash("Phải ghi lý do đình chỉ (ít nhất 3 ký tự).", "err");
+            return;
+          }
+          terminateCand.mutate({ id: s.session_id, reason: reason.trim() });
+        }}
       />
     </div>
   );
