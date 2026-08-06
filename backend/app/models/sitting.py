@@ -76,6 +76,10 @@ class Sitting(Base, TimestampMixin):
     # so the per-question summary stays in source order even after payload purge.
     # Shape: [{"id": "<uuid>", "text": "...", "correct_option": "A"}, …]
     report_snapshot: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    # Ánh xạ mã in trên phiếu giấy → thí sinh, ĐÚNG NHƯ LÚC IN (đợt 6). Danh sách
+    # candidate_id theo thứ tự mã 1, 2, 3… Không tính lại lúc quét: thêm/bớt một
+    # thí sinh giữa chừng là gán nhầm bài cho người khác mà không có dấu hiệu nào.
+    paper_roster: Mapped[list[str] | None] = mapped_column(JSONB)
 
     exam: Mapped["Exam"] = relationship(back_populates="sittings")
     sessions: Mapped[list["ExamSession"]] = relationship(

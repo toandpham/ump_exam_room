@@ -14,6 +14,7 @@ import MonitorPage from "./pages/MonitorPage";
 import ReportsPage from "./pages/ReportsPage";
 import CollusionPage from "./pages/CollusionPage";
 import BackupsPage from "./pages/BackupsPage";
+import PaperPage from "./pages/PaperPage";
 import MyRoomsPage from "./pages/MyRoomsPage";
 import AdminsPage from "./pages/AdminsPage";
 import AuditLogPage from "./pages/AuditLogPage";
@@ -52,6 +53,7 @@ export default function App() {
             <Route path="monitor" element={<MonitorPage />} />
             <Route path="reports" element={<ReportsPage />} />
             <Route path="collusion" element={<CollusionPage />} />
+            <Route path="paper" element={<PaperPage />} />
           </Route>
           {/* Exam (kỳ thi) container dashboard */}
           <Route path="/exams/:examId" element={<SectionDetailPage />}>

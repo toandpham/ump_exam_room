@@ -20,6 +20,7 @@ from app.api.admin import candidates as admin_candidates
 from app.api.admin import exams as admin_exams
 from app.api.admin import license as admin_license
 from app.api.admin import monitor as admin_monitor
+from app.api.admin import paper as admin_paper
 from app.api.admin import reports as admin_reports
 from app.api.admin import rooms as admin_rooms
 from app.api.admin import sittings as admin_sittings
@@ -184,6 +185,7 @@ app.include_router(admin_rooms.router, prefix="/api/admin", tags=["admin-rooms"]
 app.include_router(admin_candidates.router, prefix="/api/admin/candidates", tags=["admin-candidates"], dependencies=_proctor_only)
 app.include_router(admin_monitor.router, prefix="/api/admin", tags=["admin-monitor"])
 app.include_router(admin_reports.router, prefix="/api/admin", tags=["admin-reports"])
+app.include_router(admin_paper.router, prefix="/api/admin", tags=["admin-paper"])
 app.include_router(exam_auth.router, prefix="/api/exam/auth", tags=["exam-auth"])
 app.include_router(exam_session.router, prefix="/api/exam", tags=["exam-session"])
 app.include_router(exam_answer.router, prefix="/api/exam", tags=["exam-answer"])
