@@ -97,6 +97,9 @@ export const examApi = {
   answersBulk: async (answers: { question_id: string; selected_option: string | null }[]) =>
     (await api.post("/exam/answers", { answers })).data,
   submit: async () => (await api.post("/exam/submit")).data,
+  /** Thí sinh báo một câu hỏi có vấn đề — lưu cùng bài để hội đồng đọc lúc chấm. */
+  reportQuestion: async (questionId: string, content: string) =>
+    (await api.post("/exam/question-report", { question_id: questionId, content })).data,
   result: async (): Promise<{ status: string; submitted_at: string | null; total: number; answered: number; total_correct: number }> =>
     (await api.get("/exam/result")).data,
 };

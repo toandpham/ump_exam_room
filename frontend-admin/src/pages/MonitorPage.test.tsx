@@ -20,7 +20,8 @@ vi.mock("../api/sittings", () => ({
 }));
 vi.mock("../api/monitor", () => ({
   monitorApi: { logout: vi.fn(), admit: vi.fn(), pauseSession: vi.fn(), resumeSession: vi.fn(),
-    kioskQuitSession: vi.fn() },
+    kioskQuitSession: vi.fn(), extendSession: vi.fn(), terminateSession: vi.fn(),
+    questionReports: vi.fn(async () => []), resolveQuestionReport: vi.fn() },
 }));
 
 const ROSTER = {

@@ -15,6 +15,8 @@ export interface SessionSummary {
   /** Mốc hết giờ RIÊNG của thí sinh này (đồng hồ là per-candidate, AD-47). */
   end_time: string | null;
   paused: boolean;
+  /** Số khiếu nại câu hỏi CHƯA xử lý của thí sinh này. */
+  open_question_reports: number;
   /** Lý do bị đình chỉ thi (status = 'terminated'). */
   terminated_reason: string | null;
   /** Đang tạm dừng VÀ đã quá end_time — bài sẽ không bao giờ tự nộp (AD-121 #2). */
@@ -76,4 +78,25 @@ export const monitorApi = {
   /** Đình chỉ thi: dừng hẳn bài, chấm với những gì đã làm. Lý do bắt buộc. */
   terminateSession: async (sessionId: string, reason: string) =>
     (await api.post(`/admin/sessions/${sessionId}/terminate`, { reason })).data,
+  /** Khiếu nại câu hỏi của thí sinh trong buổi này (chưa xử lý lên trước). */
+  questionReports: async (sittingId: string): Promise<QuestionReport[]> =>
+    (await api.get(`/admin/sittings/${sittingId}/question-reports`)).data,
+  resolveQuestionReport: async (reportId: string, resolution: string) =>
+    (await api.post(`/admin/question-reports/${reportId}/resolve`, { resolution })).data,
 };
+
+export interface QuestionReport {
+  id: string;
+  candidate_id: string;
+  cccd: string;
+  full_name: string;
+  room_name: string | null;
+  question_id: string;
+  /** Số thứ tự câu TRONG ĐỀ CỦA THÍ SINH ĐÓ (đề trộn nên mỗi người một thứ tự). */
+  question_number: number;
+  content: string;
+  created_at: string;
+  resolved_at: string | null;
+  resolution: string | null;
+  resolved_by_name: string | null;
+}

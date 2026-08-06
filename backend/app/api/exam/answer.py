@@ -5,14 +5,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_candidate
 from app.core.redis import redis_client
 from app.database import get_db
-from app.models import Answer, Candidate, ExamSession, Sitting
+from app.models import Answer, Candidate, ExamSession, QuestionReport, Sitting
 from app.models.enums import FINALISED_STATUSES, EventType, SessionStatus
 from app.schemas.answer import (
     AnswerIn,
@@ -26,6 +26,7 @@ from app.schemas.answer import (
     ExamResult,
     SubmitResult,
 )
+from app.schemas.question_report import QuestionReportIn
 from app.services import session_service
 from app.websocket.manager import manager
 
@@ -188,6 +189,51 @@ async def preload_done(
     if session.status in {SessionStatus.READY.value, SessionStatus.IN_PROGRESS.value}:
         await redis_client.set(session_service.preload_key(session.id), "1", ex=12 * 3600)
     return {"ok": True}
+
+
+# Trần khiếu nại mỗi phiên — chống nghịch. Đủ rộng cho một bài thi thật (thí sinh
+# gặp vài câu có vấn đề là nhiều), đủ chặt để không ai spam được vào CSDL.
+MAX_QUESTION_REPORTS_PER_SESSION = 20
+
+
+@router.post("/question-report")
+async def report_question(
+    body: QuestionReportIn,
+    candidate: Candidate = Depends(get_current_candidate),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Thí sinh báo một câu hỏi có vấn đề ("câu 47 thiếu hình").
+
+    Nội dung lưu cùng bài để hội đồng đọc khi chấm — khác với "Báo giám thị" (AD-122)
+    vốn chỉ là một cờ cho thông tin cá nhân bị sai. Không đụng gì tới đáp án hay
+    đồng hồ: thí sinh báo xong làm bài tiếp bình thường.
+    """
+    session = await _current_session(db, candidate)
+    if session.status != SessionStatus.IN_PROGRESS.value:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Chỉ báo được khi đang làm bài.")
+    order = session.question_order or []
+    qid = str(body.question_id)
+    if qid not in order:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Câu hỏi không thuộc đề của bạn.")
+    used = await db.scalar(
+        select(func.count(QuestionReport.id)).where(QuestionReport.session_id == session.id)
+    ) or 0
+    if used >= MAX_QUESTION_REPORTS_PER_SESSION:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS,
+                            "Bạn đã gửi quá nhiều lượt báo lỗi cho bài thi này.")
+    db.add(QuestionReport(
+        session_id=session.id, candidate_id=candidate.id, sitting_id=session.sitting_id,
+        question_id=body.question_id,
+        # Số câu THEO ĐỀ CỦA CHÍNH THÍ SINH NÀY (đề trộn) để giám thị tra tại chỗ.
+        question_number=order.index(qid) + 1,
+        content=body.content,
+    ))
+    await db.commit()
+    await manager.publish("admin", "question_reported", exam_id=session.exam_id,
+                          session_id=session.id,
+                          data={"candidate_id": str(candidate.id),
+                                "question_number": order.index(qid) + 1})
+    return {"received": True}
 
 
 @router.post("/answer", response_model=AnswerOut)

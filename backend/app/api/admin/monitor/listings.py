@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import room_ids_for_proctor, sitting_for_admin
 from app.database import get_db
-from app.models import Admin, Answer, Candidate, Exam, ExamEvent, ExamSession, Room, Sitting
+from app.models import (
+    Admin, Answer, Candidate, Exam, ExamEvent, ExamSession, QuestionReport, Room, Sitting,
+)
 from app.models.enums import FINALISED_STATUSES, AdminRole, EventType, SessionStatus
 from app.schemas.monitor import (
     RosterCandidate,
@@ -122,6 +124,16 @@ async def list_sessions(
     from app.core import device_lock
     NEEDS_ONLINE = {SessionStatus.WAITING.value, SessionStatus.READY.value,
                     SessionStatus.IN_PROGRESS.value}
+    # Khiếu nại câu hỏi chưa xử lý, đếm gộp một truy vấn cho cả bảng.
+    open_reports: dict = {}
+    if rows_list:
+        counts = (await db.execute(
+            select(QuestionReport.session_id, func.count(QuestionReport.id))
+            .where(QuestionReport.session_id.in_([s.id for s, _, _ in rows_list]),
+                   QuestionReport.resolved_at.is_(None))
+            .group_by(QuestionReport.session_id)
+        )).all()
+        open_reports = {sid: n for sid, n in counts}
     beats = await device_lock.get_active_many([c.id for _, c, _ in rows_list])
     seen_by_idx = {i: device_lock.seconds_since_seen(b) for i, b in enumerate(beats)}
     now = datetime.now(timezone.utc)
@@ -141,6 +153,7 @@ async def list_sessions(
             terminated_reason=s.terminated_reason,
             room_id=c.room_id, room_name=room_name,
             preloaded=preloaded_by_idx.get(i, False),
+            open_question_reports=open_reports.get(s.id, 0),
             info_disputed=c.info_disputed_at is not None,
             last_seen_seconds=seen_by_idx.get(i),
             offline=(s.status in NEEDS_ONLINE

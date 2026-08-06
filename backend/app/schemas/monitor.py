@@ -73,6 +73,9 @@ class SessionSummary(BaseModel):
     # AD-110: máy đã tải xong toàn bộ ảnh đề (cờ Redis do máy thí sinh báo về) —
     # chủ tịch chỉ nên Bắt đầu thi khi mọi máy ready đều True.
     preloaded: bool = False
+    # Số khiếu nại câu hỏi CHƯA xử lý của thí sinh này. Giám thị không có danh sách
+    # (giữ đúng phạm vi quyền AD-124) nhưng phải thấy được em nào vừa báo lỗi.
+    open_question_reports: int = 0
 
 
 class RosterCandidate(BaseModel):

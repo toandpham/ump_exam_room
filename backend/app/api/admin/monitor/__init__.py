@@ -7,15 +7,17 @@ giám thị (only sessions of candidates in their room). The cohort-wide "Hết 
 làm bài" button is gone — each candidate auto-submits when their own clock hits 0
 (background sweep in main.py).
 
-Router được tách thành 3 submodule (control / sessions / listings) rồi gộp lại
+Router được tách thành 4 submodule (control / sessions / listings /
+question_reports) rồi gộp lại
 qua ``router`` để giữ nguyên public surface (main.py include 1 router duy nhất).
 """
 
 from fastapi import APIRouter
 
-from . import control, listings, sessions
+from . import control, listings, question_reports, sessions
 
 router = APIRouter()
 router.include_router(control.router)
 router.include_router(sessions.router)
 router.include_router(listings.router)
+router.include_router(question_reports.router)

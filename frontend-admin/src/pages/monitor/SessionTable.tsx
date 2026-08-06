@@ -102,6 +102,12 @@ function Row({ stt, s, onLogout, onAdmit, onPause, onResume, onExtend, onTermina
             ⚡ {offlineLabel(s.last_seen_seconds)}
           </span>
         )}
+        {s.open_question_reports > 0 && (
+          <span title="Thí sinh đã báo lỗi câu hỏi — xem hộp 'Khiếu nại về câu hỏi' ở đầu trang"
+            className="ml-2 text-xs px-1.5 py-0.5 rounded bg-orange-500 text-white font-semibold">
+            ⚠ Báo lỗi câu hỏi ({s.open_question_reports})
+          </span>
+        )}
         {s.status === "terminated" && (
           <span title={s.terminated_reason || "Chủ tịch đã đình chỉ thi"}
             className="ml-2 text-xs px-1.5 py-0.5 rounded bg-rose-600 text-white font-semibold">

@@ -13,6 +13,7 @@ import StuckPausedAlerts from "../components/StuckPausedAlerts";
 import SessionTable from "./monitor/SessionTable";
 import StatFilters from "./monitor/StatFilters";
 import StartExamControls from "./monitor/StartExamControls";
+import QuestionReportsPanel from "./monitor/QuestionReportsPanel";
 import type { Filter, DisplayRow } from "./monitor/constants";
 
 interface Ctx { examId: string; sittingId: string; sitting: Sitting }
@@ -158,6 +159,8 @@ export default function MonitorPage() {
       {stuckRows.length > 0 && (
         <div className="mb-3"><StuckPausedAlerts rows={stuckRows} /></div>
       )}
+
+      <QuestionReportsPanel sittingId={selectedId} />
 
       {!isActive && (
         <p className="mb-3 text-sm bg-slate-50 text-slate-700 border border-slate-200 px-3 py-2 rounded">

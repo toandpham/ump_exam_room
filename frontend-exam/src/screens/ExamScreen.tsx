@@ -25,7 +25,7 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
   // Nộp/hết giờ → xoá giấy nháp của phiên rồi chuyển sang màn kết quả.
   const handleSubmitted = () => { clearNotes(sessionId); onSubmitted(); };
   const { answers, selectOption, flags, toggleFlag, saveStatus, secondsLeft, paused, timeUp,
-          doSubmit, submitting, tabCount, submitError, clearSubmitError } =
+          doSubmit, submitting, tabCount, submitError, clearSubmitError, reportQuestion } =
     useExamSession(sessionId, data, handleSubmitted, ws);
 
   // AD-90/AD-110: CHEN HÀNG vài câu KẾ TIẾP lên trước hàng đợi nền. Toàn bộ đề đã
@@ -166,6 +166,7 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
             onNext={goNext}
             onJumpUnanswered={goToNextUnanswered}
             onSubmit={confirmSubmit}
+            onReportQuestion={reportQuestion}
           />
         </main>
 

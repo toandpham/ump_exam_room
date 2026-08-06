@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { examApi, type QuestionsResponse } from "../api/exam";
+import { errorMessage } from "../api/client";
 import type { WsEvent } from "./useExamSocket";
 import { useAntiCheat } from "./useAntiCheat";
 
@@ -330,6 +331,19 @@ export function useExamSession(
     }
   }
 
+  // Báo lỗi câu hỏi — độc lập hẳn với đường lưu đáp án: gửi thẳng, không xếp vào
+  // hàng đợi đẩy theo lô, không đụng saveStatus. Lỗi thì ném lên để hộp thoại hiện
+  // ngay tại chỗ; im lặng nuốt lỗi ở đây là thí sinh tưởng đã báo mà hội đồng
+  // không hề nhận được.
+  const reportQuestion = useCallback(async (qid: string, content: string) => {
+    try {
+      await examApi.reportQuestion(qid, content);
+    } catch (e) {
+      throw new Error(errorMessage(e, "Không gửi được. Hãy báo trực tiếp giám thị."));
+    }
+  }, []);
+
   return { answers, selectOption, flags, toggleFlag, saveStatus, secondsLeft, paused, timeUp,
-           doSubmit, submitting, tabCount, submitError, clearSubmitError: () => setSubmitError(null) };
+           doSubmit, submitting, tabCount, submitError, reportQuestion,
+           clearSubmitError: () => setSubmitError(null) };
 }
