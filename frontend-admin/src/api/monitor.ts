@@ -15,6 +15,10 @@ export interface SessionSummary {
   /** Mốc hết giờ RIÊNG của thí sinh này (đồng hồ là per-candidate, AD-47). */
   end_time: string | null;
   paused: boolean;
+  /** Tiến độ làm bài: đã trả lời / đã xem tới câu / tổng số câu trong đề. */
+  answered_count: number;
+  viewed_count: number | null;
+  question_total: number;
   /** Số khiếu nại câu hỏi CHƯA xử lý của thí sinh này. */
   open_question_reports: number;
   /** Lý do bị đình chỉ thi (status = 'terminated'). */
@@ -83,6 +87,9 @@ export const monitorApi = {
     (await api.get(`/admin/sittings/${sittingId}/question-reports`)).data,
   resolveQuestionReport: async (reportId: string, resolution: string) =>
     (await api.post(`/admin/question-reports/${reportId}/resolve`, { resolution })).data,
+  /** Cặp thí sinh cùng phòng có nhiều câu sai giống hệt nhau (hậu kiểm). */
+  collusion: async (sittingId: string): Promise<CollusionPair[]> =>
+    (await api.get(`/admin/sittings/${sittingId}/collusion`)).data,
 };
 
 export interface QuestionReport {
@@ -99,4 +106,15 @@ export interface QuestionReport {
   resolved_at: string | null;
   resolution: string | null;
   resolved_by_name: string | null;
+}
+
+export interface CollusionPair {
+  a_candidate_id: string; a_cccd: string; a_name: string;
+  b_candidate_id: string; b_cccd: string; b_name: string;
+  room_name: string | null;
+  /** Số câu hai bài cùng chọn MỘT ĐÁP ÁN SAI. */
+  shared_wrong: number;
+  wrong_a: number; wrong_b: number;
+  /** shared_wrong / số câu sai của người sai ít hơn. */
+  ratio: number;
 }

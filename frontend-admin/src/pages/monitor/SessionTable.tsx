@@ -131,6 +131,16 @@ function Row({ stt, s, onLogout, onAdmit, onPause, onResume, onExtend, onTermina
             ? <span className="block text-xs text-green-600">✓ đã tải đề</span>
             : <span className="block text-xs text-amber-600">đang tải đề…</span>
         )}
+        {/* Tiến độ làm bài — con số chủ tịch hỏi nhiều nhất mà bảng trước đây
+            không hề có. "đã xem" cho biết em ấy đã lướt hết đề chưa. */}
+        {s.status === "in_progress" && s.question_total > 0 && (
+          <span className="block text-xs text-slate-500">
+            đã làm {s.answered_count}/{s.question_total}
+            {s.viewed_count !== null && s.viewed_count < s.question_total && (
+              <span className="text-amber-600"> · mới xem tới câu {s.viewed_count}</span>
+            )}
+          </span>
+        )}
         {/* Giờ nộp — để không còn tranh cãi "thí sinh bảo đã nộp mà bảng báo đang làm". */}
         {(s.status === "submitted" || s.status === "timeout") && s.submitted_at && (
           <span className="block text-xs text-slate-400">

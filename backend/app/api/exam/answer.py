@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -77,6 +77,35 @@ def _image_pairs(obj: dict) -> list[tuple[str, str]]:
         if legacy:
             out.append((legacy, legacy))
     return out
+
+
+def _answer_upsert(session_id, question_id, option: str | None, now: datetime):
+    """Câu lệnh ghi đáp án kèm dữ liệu hành vi (đợt 4).
+
+    ``answered_at`` bị ghi đè mỗi lần đổi nên không cho biết lúc quyết định đầu tiên
+    — ``first_answered_at`` giữ mốc đó (COALESCE để dòng cũ chưa có vẫn được điền).
+    ``change_count`` CHỈ tăng khi đáp án thật sự khác lần trước: máy thí sinh đẩy
+    theo lô nên cùng một lựa chọn có thể được gửi lại nhiều lần, đếm cả những lần
+    đó thì con số vô nghĩa. ``IS DISTINCT FROM`` để NULL (bỏ chọn) cũng tính đúng.
+    """
+    ins = pg_insert(Answer).values(
+        session_id=session_id, question_id=question_id, selected_option=option,
+        answered_at=now, first_answered_at=now, change_count=0,
+    )
+    cur = Answer.__table__.c
+    return ins.on_conflict_do_update(
+        constraint="uq_answer_session_question",
+        set_={
+            "selected_option": option,
+            "answered_at": now,
+            "first_answered_at": func.coalesce(cur.first_answered_at, now),
+            "change_count": case(
+                (cur.selected_option.is_distinct_from(ins.excluded.selected_option),
+                 cur.change_count + 1),
+                else_=cur.change_count,
+            ),
+        },
+    )
 
 
 @router.get("/questions", response_model=ExamQuestionsOut)
@@ -260,15 +289,8 @@ async def save_answer(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Câu hỏi không thuộc đề của bạn.")
 
     # Upsert on the unique (session_id, question_id) constraint.
-    stmt = pg_insert(Answer).values(
-        session_id=session.id,
-        question_id=body.question_id,
-        selected_option=body.selected_option,
-    ).on_conflict_do_update(
-        constraint="uq_answer_session_question",
-        set_={"selected_option": body.selected_option, "answered_at": datetime.now(timezone.utc)},
-    )
-    await db.execute(stmt)
+    await db.execute(_answer_upsert(session.id, body.question_id, body.selected_option,
+                                    datetime.now(timezone.utc)))
     await db.commit()
     await manager.publish(
         "admin", "candidate_answer", exam_id=session.exam_id, session_id=session.id,
@@ -303,16 +325,12 @@ async def save_answers_bulk(
     for a in body.answers:
         if str(a.question_id) not in order:
             continue
-        await db.execute(
-            pg_insert(Answer).values(
-                session_id=session.id, question_id=a.question_id,
-                selected_option=a.selected_option,
-            ).on_conflict_do_update(
-                constraint="uq_answer_session_question",
-                set_={"selected_option": a.selected_option, "answered_at": now},
-            )
-        )
+        await db.execute(_answer_upsert(session.id, a.question_id, a.selected_option, now))
         saved += 1
+    # "Đã xem tới câu thứ mấy" — máy báo kèm nhịp đẩy đáp án sẵn có, không thêm
+    # request nào. CHỈ TIẾN: quay lại câu 1 không có nghĩa là chưa xem các câu sau.
+    if body.viewed_count is not None:
+        session.viewed_count = max(session.viewed_count or 0, body.viewed_count)
     await db.commit()
     if saved:
         await manager.publish(

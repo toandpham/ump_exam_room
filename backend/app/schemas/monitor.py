@@ -73,6 +73,12 @@ class SessionSummary(BaseModel):
     # AD-110: máy đã tải xong toàn bộ ảnh đề (cờ Redis do máy thí sinh báo về) —
     # chủ tịch chỉ nên Bắt đầu thi khi mọi máy ready đều True.
     preloaded: bool = False
+    # Tiến độ làm bài: đã trả lời bao nhiêu / đã xem tới câu thứ mấy / tổng số câu
+    # trong đề của thí sinh này. Trước đây bảng giám sát không có con số nào cả,
+    # mà đây lại là thứ chủ tịch hỏi nhiều nhất.
+    answered_count: int = 0
+    viewed_count: int | None = None
+    question_total: int = 0
     # Số khiếu nại câu hỏi CHƯA xử lý của thí sinh này. Giám thị không có danh sách
     # (giữ đúng phạm vi quyền AD-124) nhưng phải thấy được em nào vừa báo lỗi.
     open_question_reports: int = 0

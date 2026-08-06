@@ -10,6 +10,8 @@ function session(over: Partial<SessionSummary> = {}): SessionSummary {
     unit: "Đơn vị 1", category: "ĐT1", attempt_number: 1, photo_path: null,
     status: "in_progress", paused: false, overdue_paused: false,
     terminated_reason: null, end_time: null, submitted_at: null,
+    answered_count: 0, viewed_count: null, question_total: 0,
+    open_question_reports: 0,
     self_registered: false, room_id: null, room_name: null,
     preloaded: false, info_disputed: false, offline: false, last_seen_seconds: null, ...over,
   };
@@ -141,5 +143,24 @@ describe("SessionTable — điều hành từng thí sinh (đợt 2)", () => {
       onLogout={noop} onAdmit={noop} />);
     expect(normal.container.textContent).toContain("tạm dừng");
     expect(normal.container.textContent).not.toContain("ĐÃ QUÁ GIỜ");
+  });
+});
+
+describe("SessionTable — tiến độ làm bài (đợt 4)", () => {
+  it("đang làm bài → hiện đã làm bao nhiêu câu trên tổng số", () => {
+    const { container } = render(<SessionTable
+      rows={[{ kind: "session", s: session({
+        status: "in_progress", answered_count: 120, question_total: 280, viewed_count: 280 }) }]}
+      onLogout={noop} onAdmit={noop} />);
+    expect(container.textContent).toContain("đã làm 120/280");
+    expect(container.textContent).not.toContain("mới xem tới câu");
+  });
+
+  it("chưa lướt hết đề → cảnh báo, vì đây là dấu hiệu sắp nộp mà còn câu chưa đọc", () => {
+    const { container } = render(<SessionTable
+      rows={[{ kind: "session", s: session({
+        status: "in_progress", answered_count: 40, question_total: 280, viewed_count: 45 }) }]}
+      onLogout={noop} onAdmit={noop} />);
+    expect(container.textContent).toContain("mới xem tới câu 45");
   });
 });

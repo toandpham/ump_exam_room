@@ -12,7 +12,9 @@ from app.database import get_db
 from app.models import (
     Admin, Answer, Candidate, Exam, ExamEvent, ExamSession, QuestionReport, Room, Sitting,
 )
-from app.models.enums import FINALISED_STATUSES, AdminRole, EventType, SessionStatus
+from app.models.enums import (
+    FINALISED_STATUSES, AdminRole, EventType, SessionStatus, SittingStatus,
+)
 from app.schemas.monitor import (
     RosterCandidate,
     RosterResponse,
@@ -20,7 +22,8 @@ from app.schemas.monitor import (
     SecurityEventOut,
     SessionSummary,
 )
-from app.services import session_service
+from app.core.redis import redis_client
+from app.services import collusion_service, report_service, session_service
 
 from ._common import _require_proctor, _require_proctor_or_room
 
@@ -76,6 +79,28 @@ async def check_integrity(
             "mismatched": mismatched, "unsealed_legacy": unsealed}
 
 
+@router.get("/sittings/{sitting_id}/collusion")
+async def collusion_check(
+    sitting_id: uuid.UUID,
+    limit: int = Query(default=50, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+    admin: Admin = Depends(_require_proctor),
+) -> list[dict]:
+    """Các cặp thí sinh CÙNG PHÒNG có nhiều câu sai giống hệt nhau.
+
+    Hậu kiểm, chỉ chạy khi buổi đã đóng (409 nếu còn mở): quét giữa giờ vừa tốn vừa
+    cho kết quả nửa vời vì bài chưa làm xong. Kết quả là DẤU HIỆU để hội đồng xem
+    xét, không phải bằng chứng.
+    """
+    sitting = await sitting_for_admin(db, sitting_id, admin)
+    if sitting.status == SittingStatus.ACTIVE.value:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Chỉ đối chiếu được sau khi ĐÓNG BUỔI — lúc mọi bài đã chốt.")
+    key = await report_service.get_answer_key(redis_client, sitting)
+    return await collusion_service.find_suspicious_pairs(db, sitting, key, limit=limit)
+
+
 # --- listings ---------------------------------------------------------------
 
 async def _room_filter_ids(db: AsyncSession, exam_id, admin: Admin) -> list[uuid.UUID] | None:
@@ -124,6 +149,16 @@ async def list_sessions(
     from app.core import device_lock
     NEEDS_ONLINE = {SessionStatus.WAITING.value, SessionStatus.READY.value,
                     SessionStatus.IN_PROGRESS.value}
+    # Số câu đã trả lời, đếm gộp một truy vấn cho cả bảng (không N+1).
+    answered: dict = {}
+    if rows_list:
+        counts = (await db.execute(
+            select(Answer.session_id, func.count(Answer.id))
+            .where(Answer.session_id.in_([s.id for s, _, _ in rows_list]),
+                   Answer.selected_option.is_not(None))
+            .group_by(Answer.session_id)
+        )).all()
+        answered = {sid: n for sid, n in counts}
     # Khiếu nại câu hỏi chưa xử lý, đếm gộp một truy vấn cho cả bảng.
     open_reports: dict = {}
     if rows_list:
@@ -154,6 +189,9 @@ async def list_sessions(
             room_id=c.room_id, room_name=room_name,
             preloaded=preloaded_by_idx.get(i, False),
             open_question_reports=open_reports.get(s.id, 0),
+            answered_count=answered.get(s.id, 0),
+            viewed_count=s.viewed_count,
+            question_total=len(s.question_order or []),
             info_disputed=c.info_disputed_at is not None,
             last_seen_seconds=seen_by_idx.get(i),
             offline=(s.status in NEEDS_ONLINE

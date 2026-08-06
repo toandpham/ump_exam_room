@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, BarChart3, FileText, MonitorPlay, Play, Power } from "lucide-react";
+import { ArrowLeft, BarChart3, FileText, MonitorPlay, Play, Power, ShieldAlert } from "lucide-react";
 import { sittingsApi } from "../api/sittings";
 import { errorMessage } from "../api/client";
 import StatusBadge from "../components/StatusBadge";
@@ -9,6 +9,7 @@ const TABS = [
   { to: "exam",    label: "Đề thi",   icon: FileText,    end: false },
   { to: "monitor", label: "Giám sát", icon: MonitorPlay, end: false },
   { to: "reports", label: "Báo cáo",  icon: BarChart3,   end: false },
+  { to: "collusion", label: "Đối chiếu", icon: ShieldAlert, end: false },
 ];
 
 export default function SittingDetailPage() {

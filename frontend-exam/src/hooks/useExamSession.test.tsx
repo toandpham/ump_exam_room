@@ -303,3 +303,28 @@ describe("useExamSession (AD-69 batch save)", () => {
     expect(answersBulk).not.toHaveBeenCalled();
   });
 });
+
+describe("useExamSession — quan trắc tiến độ đọc đề (đợt 4)", () => {
+  it("số câu đã xem đi GHÉP vào nhịp đẩy đáp án, không tốn request riêng", async () => {
+    const d = data(60);
+    const { result } = renderHook(() => useExamSession("s1", d, () => {}, ws));
+    act(() => { result.current.markViewed(12); result.current.selectOption("q1", "A"); });
+    await act(async () => { await result.current.doSubmit(true); });
+    expect(answersBulk).toHaveBeenCalledWith(
+      [{ question_id: "q1", selected_option: "A" }], 12);
+  });
+
+  it("chỉ nhận theo chiều TIẾN — quay lại câu 1 không xoá dấu đã xem tới câu 12", async () => {
+    const d = data(60);
+    const { result } = renderHook(() => useExamSession("s1", d, () => {}, ws));
+    act(() => { result.current.markViewed(12); result.current.markViewed(1); });
+    act(() => result.current.selectOption("q1", "A"));
+    await act(async () => { await result.current.doSubmit(true); });
+    expect(answersBulk).toHaveBeenCalledWith(
+      [{ question_id: "q1", selected_option: "A" }], 12);
+  });
+
+  // (Việc "không có số mới thì giữ nguyên hình dạng lời gọi cũ" đã được các test
+  // AD-69 ở trên khoá lại: chúng khẳng định answersBulk được gọi với ĐÚNG MỘT
+  // tham số.)
+});
