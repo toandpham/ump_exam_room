@@ -82,3 +82,6 @@ logs/
 # File giao tiếp cập-nhật-qua-web (AD-89) — runtime, không commit
 /backend/update_request.flag
 /backend/update_state.json
+
+# Mã nguồn mở TCExam để tham khảo — KHÔNG commit (dự án bên thứ ba, repo này công khai)
+/tcexam/
