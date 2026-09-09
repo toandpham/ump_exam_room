@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { examApi, type QuestionsResponse } from "../api/exam";
-import { errorMessage } from "../api/client";
 import type { WsEvent } from "./useExamSocket";
 import { useAntiCheat } from "./useAntiCheat";
 
@@ -87,10 +86,6 @@ export function useExamSession(
   const submittedRef = useRef(false);
   // Đếm số lần đồng bộ lô hỏng liên tiếp — chỉ báo "mất kết nối" sau vài lần (debounce).
   const failCountRef = useRef(0);
-  // Quan trắc tiến độ đọc đề: câu xa nhất thí sinh đã xem tới, và giá trị đã báo
-  // lên máy chủ lần gần nhất (để không gửi lại con số cũ).
-  const viewedRef = useRef(0);
-  const viewedSentRef = useRef(0);
 
   const ansKey = `answers_${sessionId}`;
   const ansKeyRef = useRef(ansKey);
@@ -204,17 +199,9 @@ export function useExamSession(
   async function flushBatch(): Promise<boolean> {
     const snapshot = { ...dirtyRef.current };
     const keys = Object.keys(snapshot);
-    // "Đã xem tới câu thứ mấy" đi ghép vào chính nhịp này (không thêm request nào).
-    // Chưa có gì để gửi VÀ số câu đã xem không đổi → khỏi gọi mạng.
-    const viewed = viewedRef.current > viewedSentRef.current ? viewedRef.current : undefined;
-    if (keys.length === 0 && viewed === undefined) return true;
+    if (keys.length === 0) return true;
     try {
-      const batch = keys.map((qid) => ({ question_id: qid, selected_option: snapshot[qid] }));
-      // Chỉ truyền tham số thứ hai khi THẬT SỰ có số mới để báo — giữ nguyên hình
-      // dạng lời gọi cũ cho đường đi thường gặp.
-      if (viewed === undefined) await examApi.answersBulk(batch);
-      else await examApi.answersBulk(batch, viewed);
-      if (viewed !== undefined) viewedSentRef.current = viewed;
+      await examApi.answersBulk(keys.map((qid) => ({ question_id: qid, selected_option: snapshot[qid] })));
       failCountRef.current = 0;   // đồng bộ OK → reset đếm lỗi
       // Chỉ xoá khoá nào CHƯA bị đổi giữa chừng (đổi rồi → để lô sau đẩy).
       for (const qid of keys) if (dirtyRef.current[qid] === snapshot[qid]) delete dirtyRef.current[qid];
@@ -343,26 +330,6 @@ export function useExamSession(
     }
   }
 
-  // Số câu ĐÃ XEM TỚI — chỉ tiến, không lùi (quay lại câu 1 không có nghĩa là chưa
-  // xem các câu sau). Dùng ref vì đây là dữ liệu quan trắc, không được làm cả màn
-  // thi vẽ lại mỗi lần chuyển câu (AD-90b).
-  const markViewed = useCallback((n: number) => {
-    if (n > viewedRef.current) viewedRef.current = n;
-  }, []);
-
-  // Báo lỗi câu hỏi — độc lập hẳn với đường lưu đáp án: gửi thẳng, không xếp vào
-  // hàng đợi đẩy theo lô, không đụng saveStatus. Lỗi thì ném lên để hộp thoại hiện
-  // ngay tại chỗ; im lặng nuốt lỗi ở đây là thí sinh tưởng đã báo mà hội đồng
-  // không hề nhận được.
-  const reportQuestion = useCallback(async (qid: string, content: string) => {
-    try {
-      await examApi.reportQuestion(qid, content);
-    } catch (e) {
-      throw new Error(errorMessage(e, "Không gửi được. Hãy báo trực tiếp giám thị."));
-    }
-  }, []);
-
   return { answers, selectOption, flags, toggleFlag, saveStatus, secondsLeft, paused, timeUp,
-           doSubmit, submitting, tabCount, submitError, reportQuestion, markViewed,
-           clearSubmitError: () => setSubmitError(null) };
+           doSubmit, submitting, tabCount, submitError, clearSubmitError: () => setSubmitError(null) };
 }

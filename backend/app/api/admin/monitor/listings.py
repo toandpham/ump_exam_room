@@ -9,12 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import room_ids_for_proctor, sitting_for_admin
 from app.database import get_db
-from app.models import (
-    Admin, Answer, Candidate, Exam, ExamEvent, ExamSession, QuestionReport, Room, Sitting,
-)
-from app.models.enums import (
-    FINALISED_STATUSES, AdminRole, EventType, SessionStatus, SittingStatus,
-)
+from app.models import Admin, Answer, Candidate, Exam, ExamEvent, ExamSession, Room, Sitting
+from app.models.enums import AdminRole, EventType, SessionStatus
 from app.schemas.monitor import (
     RosterCandidate,
     RosterResponse,
@@ -22,8 +18,7 @@ from app.schemas.monitor import (
     SecurityEventOut,
     SessionSummary,
 )
-from app.core.redis import redis_client
-from app.services import collusion_service, report_service, session_service
+from app.services import session_service
 
 from ._common import _require_proctor, _require_proctor_or_room
 
@@ -53,7 +48,8 @@ async def check_integrity(
     sessions = list(await db.scalars(
         select(ExamSession).where(
             ExamSession.sitting_id == sitting.id,
-            ExamSession.status.in_(FINALISED_STATUSES),
+            ExamSession.status.in_({SessionStatus.SUBMITTED.value,
+                                    SessionStatus.TIMEOUT.value}),
         )
     ))
     ok = 0
@@ -77,28 +73,6 @@ async def check_integrity(
         await db.commit()
     return {"checked": len(sessions), "ok": ok,
             "mismatched": mismatched, "unsealed_legacy": unsealed}
-
-
-@router.get("/sittings/{sitting_id}/collusion")
-async def collusion_check(
-    sitting_id: uuid.UUID,
-    limit: int = Query(default=50, ge=1, le=500),
-    db: AsyncSession = Depends(get_db),
-    admin: Admin = Depends(_require_proctor),
-) -> list[dict]:
-    """Các cặp thí sinh CÙNG PHÒNG có nhiều câu sai giống hệt nhau.
-
-    Hậu kiểm, chỉ chạy khi buổi đã đóng (409 nếu còn mở): quét giữa giờ vừa tốn vừa
-    cho kết quả nửa vời vì bài chưa làm xong. Kết quả là DẤU HIỆU để hội đồng xem
-    xét, không phải bằng chứng.
-    """
-    sitting = await sitting_for_admin(db, sitting_id, admin)
-    if sitting.status == SittingStatus.ACTIVE.value:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Chỉ đối chiếu được sau khi ĐÓNG BUỔI — lúc mọi bài đã chốt.")
-    key = await report_service.get_answer_key(redis_client, sitting)
-    return await collusion_service.find_suspicious_pairs(db, sitting, key, limit=limit)
 
 
 # --- listings ---------------------------------------------------------------
@@ -149,29 +123,8 @@ async def list_sessions(
     from app.core import device_lock
     NEEDS_ONLINE = {SessionStatus.WAITING.value, SessionStatus.READY.value,
                     SessionStatus.IN_PROGRESS.value}
-    # Số câu đã trả lời, đếm gộp một truy vấn cho cả bảng (không N+1).
-    answered: dict = {}
-    if rows_list:
-        counts = (await db.execute(
-            select(Answer.session_id, func.count(Answer.id))
-            .where(Answer.session_id.in_([s.id for s, _, _ in rows_list]),
-                   Answer.selected_option.is_not(None))
-            .group_by(Answer.session_id)
-        )).all()
-        answered = {sid: n for sid, n in counts}
-    # Khiếu nại câu hỏi chưa xử lý, đếm gộp một truy vấn cho cả bảng.
-    open_reports: dict = {}
-    if rows_list:
-        counts = (await db.execute(
-            select(QuestionReport.session_id, func.count(QuestionReport.id))
-            .where(QuestionReport.session_id.in_([s.id for s, _, _ in rows_list]),
-                   QuestionReport.resolved_at.is_(None))
-            .group_by(QuestionReport.session_id)
-        )).all()
-        open_reports = {sid: n for sid, n in counts}
     beats = await device_lock.get_active_many([c.id for _, c, _ in rows_list])
     seen_by_idx = {i: device_lock.seconds_since_seen(b) for i, b in enumerate(beats)}
-    now = datetime.now(timezone.utc)
     return [
         SessionSummary(
             session_id=s.id, candidate_id=c.id, cccd=c.cccd, full_name=c.full_name,
@@ -183,15 +136,8 @@ async def list_sessions(
             device_id=s.device_id,
             self_registered=c.self_registered,
             paused=s.paused_at is not None,
-            overdue_paused=(s.paused_at is not None
-                            and s.end_time is not None and s.end_time < now),
-            terminated_reason=s.terminated_reason,
             room_id=c.room_id, room_name=room_name,
             preloaded=preloaded_by_idx.get(i, False),
-            open_question_reports=open_reports.get(s.id, 0),
-            answered_count=answered.get(s.id, 0),
-            viewed_count=s.viewed_count,
-            question_total=len(s.question_order or []),
             info_disputed=c.info_disputed_at is not None,
             last_seen_seconds=seen_by_idx.get(i),
             offline=(s.status in NEEDS_ONLINE
@@ -229,21 +175,13 @@ async def sitting_roster(
         .order_by(Candidate.full_name)
     )).all()
 
-    # Mốc đếm ngược: BỎ phiên đang tạm dừng — đồng hồ của họ đóng băng tại paused_at
-    # nên end_time cũ không phản ánh thời gian thực của ai; để lẫn vào thì đồng hồ
-    # chung bị kéo xuống theo người đã dừng (lỗ AD-121 #3). Trả cả hai đầu vì khi có
-    # người vào trễ / được cộng giờ riêng thì "sớm nhất" KHÔNG phải là lúc cả phòng
-    # hết giờ, mà giao diện lại ghi "thời gian thi còn lại".
-    running_clock = (
-        ExamSession.sitting_id == sitting_id,
-        ExamSession.status == SessionStatus.IN_PROGRESS.value,
-        ExamSession.paused_at.is_(None),
-        ExamSession.end_time.is_not(None),
+    earliest_end_time = await db.scalar(
+        select(func.min(ExamSession.end_time)).where(
+            ExamSession.sitting_id == sitting_id,
+            ExamSession.status == SessionStatus.IN_PROGRESS.value,
+            ExamSession.end_time.is_not(None),
+        )
     )
-    earliest_end_time, latest_end_time = (await db.execute(
-        select(func.min(ExamSession.end_time), func.max(ExamSession.end_time))
-        .where(*running_clock)
-    )).one()
 
     return RosterResponse(
         sitting=RosterSitting(
@@ -257,7 +195,6 @@ async def sitting_roster(
         logged_in=logged_in,
         not_logged_in_total=len(pending),
         earliest_end_time=earliest_end_time,
-        latest_end_time=latest_end_time,
         server_time=datetime.now(timezone.utc),
         not_logged_in=[
             RosterCandidate(

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, render } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import SessionTable from "./SessionTable";
 import type { SessionSummary } from "../../api/monitor";
 import type { DisplayRow } from "./constants";
@@ -8,10 +8,7 @@ function session(over: Partial<SessionSummary> = {}): SessionSummary {
   return {
     session_id: "s1", candidate_id: "c1", cccd: "079000000001", full_name: "Trần Văn A",
     unit: "Đơn vị 1", category: "ĐT1", attempt_number: 1, photo_path: null,
-    status: "in_progress", paused: false, overdue_paused: false,
-    terminated_reason: null, end_time: null, submitted_at: null,
-    answered_count: 0, viewed_count: null, question_total: 0,
-    open_question_reports: 0,
+    status: "in_progress", paused: false,
     self_registered: false, room_id: null, room_name: null,
     preloaded: false, info_disputed: false, offline: false, last_seen_seconds: null, ...over,
   };
@@ -97,70 +94,5 @@ describe("SessionTable", () => {
       <SessionTable rows={[{ kind: "session", s: session({}) }]} onLogout={noop} onAdmit={noop} />,
     );
     expect(container.textContent).not.toContain("mất kết nối");
-  });
-});
-
-describe("SessionTable — điều hành từng thí sinh (đợt 2)", () => {
-  it("đang làm bài → có nút Cộng giờ và Đình chỉ", () => {
-    const onExtend = vi.fn();
-    const onTerminate = vi.fn();
-    const { getByTitle } = render(<SessionTable
-      rows={[{ kind: "session", s: session({ status: "in_progress" }) }]}
-      onLogout={noop} onAdmit={noop} onExtend={onExtend} onTerminate={onTerminate} />);
-
-    fireEvent.click(getByTitle(/Cộng giờ riêng/));
-    expect(onExtend).toHaveBeenCalledTimes(1);
-    fireEvent.click(getByTitle(/Đình chỉ thi/));
-    expect(onTerminate).toHaveBeenCalledTimes(1);
-  });
-
-  it("bài đã chốt thì không còn cộng giờ / đình chỉ được", () => {
-    // Hai nút này chỉ có nghĩa khi đồng hồ đang chạy; máy chủ cũng trả 409.
-    const { container } = render(<SessionTable
-      rows={[{ kind: "session", s: session({ status: "submitted" }) }]}
-      onLogout={noop} onAdmit={noop} onExtend={vi.fn()} onTerminate={vi.fn()} />);
-    expect(container.textContent).not.toContain("Cộng giờ");
-    expect(container.textContent).not.toContain("Đình chỉ");
-  });
-
-  it("thí sinh bị đình chỉ hiện rõ nhãn và lý do", () => {
-    const { container, getByTitle } = render(<SessionTable
-      rows={[{ kind: "session", s: session({
-        status: "terminated", terminated_reason: "Mang tài liệu vào phòng thi" }) }]}
-      onLogout={noop} onAdmit={noop} />);
-    expect(container.textContent).toContain("Đình chỉ");
-    expect(getByTitle("Mang tài liệu vào phòng thi")).toBeTruthy();
-  });
-
-  it("tạm dừng ĐÃ QUÁ GIỜ hiện khác với tạm dừng bình thường (AD-121 #2)", () => {
-    const stuck = render(<SessionTable
-      rows={[{ kind: "session", s: session({ paused: true, overdue_paused: true }) }]}
-      onLogout={noop} onAdmit={noop} />);
-    expect(stuck.container.textContent).toContain("ĐÃ QUÁ GIỜ");
-
-    const normal = render(<SessionTable
-      rows={[{ kind: "session", s: session({ paused: true, overdue_paused: false }) }]}
-      onLogout={noop} onAdmit={noop} />);
-    expect(normal.container.textContent).toContain("tạm dừng");
-    expect(normal.container.textContent).not.toContain("ĐÃ QUÁ GIỜ");
-  });
-});
-
-describe("SessionTable — tiến độ làm bài (đợt 4)", () => {
-  it("đang làm bài → hiện đã làm bao nhiêu câu trên tổng số", () => {
-    const { container } = render(<SessionTable
-      rows={[{ kind: "session", s: session({
-        status: "in_progress", answered_count: 120, question_total: 280, viewed_count: 280 }) }]}
-      onLogout={noop} onAdmit={noop} />);
-    expect(container.textContent).toContain("đã làm 120/280");
-    expect(container.textContent).not.toContain("mới xem tới câu");
-  });
-
-  it("chưa lướt hết đề → cảnh báo, vì đây là dấu hiệu sắp nộp mà còn câu chưa đọc", () => {
-    const { container } = render(<SessionTable
-      rows={[{ kind: "session", s: session({
-        status: "in_progress", answered_count: 40, question_total: 280, viewed_count: 45 }) }]}
-      onLogout={noop} onAdmit={noop} />);
-    expect(container.textContent).toContain("mới xem tới câu 45");
   });
 });

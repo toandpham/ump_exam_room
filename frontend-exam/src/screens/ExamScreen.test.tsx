@@ -10,7 +10,6 @@ function resetSession() {
     saveStatus: "saved", secondsLeft: 600, paused: false, timeUp: false,
     doSubmit: vi.fn(), submitting: false, tabCount: 0,
     submitError: null, clearSubmitError: vi.fn(),
-    reportQuestion: vi.fn(), markViewed: vi.fn(),
   });
 }
 resetSession();

@@ -737,7 +737,7 @@ async def test_result_readable_after_sitting_closed(client, factory):
 
     # Chairman closes the sitting while the candidate is still in_progress:
     # force-submit + score + purge. No sitting is active afterwards.
-    r = await client.post(f"/api/admin/sittings/{sitting.id}/end?force=true", headers=auth(ptok))
+    r = await client.post(f"/api/admin/sittings/{sitting.id}/end", headers=auth(ptok))
     assert r.status_code == 200, r.text
 
     r = await client.get("/api/exam/result", headers=ch)

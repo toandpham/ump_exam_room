@@ -3,7 +3,6 @@ import { ChevronLeft, ChevronRight, Flag, Send, SkipForward } from "lucide-react
 import type { ExamQuestion } from "../../api/exam";
 import { sciText } from "../../lib/sciText";
 import ImageLightbox from "./ImageLightbox";
-import ReportQuestionButton from "./ReportQuestionButton";
 
 /** The centered question card: stem + images, the 4 options (positional A/B/C/D
  * labels per QTI — see note below), and the prev / jump-unanswered / next controls.
@@ -11,7 +10,7 @@ import ReportQuestionButton from "./ReportQuestionButton";
  * AD-90b: memo — khỏi vẽ lại theo mỗi nhịp đồng hồ (xem QuestionNavigator). */
 function QuestionCard({
   q, index, total, answers, unansweredCount, flagged, onSelect, onToggleFlag,
-  onPrev, onNext, onJumpUnanswered, onSubmit, onReportQuestion,
+  onPrev, onNext, onJumpUnanswered, onSubmit,
 }: {
   q: ExamQuestion;
   index: number;
@@ -26,8 +25,6 @@ function QuestionCard({
   onNext: () => void;
   onJumpUnanswered: () => void;
   onSubmit: () => void;
-  /** Gửi khiếu nại về câu này lên hội đồng. Không truyền → ẩn nút. */
-  onReportQuestion?: (qid: string, content: string) => Promise<void>;
 }) {
   // Ảnh đang phóng to (lightbox). null = không phóng. AD-109: giữ CẢ bản nhỏ —
   // hiện ngay bản nhỏ (đã giải nén sẵn), bản đầy đủ đè lên khi tải xong; máy 4GB
@@ -37,9 +34,8 @@ function QuestionCard({
   return (
     <div className="my-auto w-full">
       <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm p-6">
-        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-slate-500">Câu {index + 1}/{total}</h2>
-          <div className="flex items-center gap-2">
           {/* Đánh dấu để quay lại sau. Ghi chú riêng của thí sinh — không gửi lên
               máy chủ, giám thị không thấy, không ảnh hưởng bài làm. */}
           <button
@@ -55,11 +51,6 @@ function QuestionCard({
             <Flag size={15} className={flagged ? "fill-white" : ""} />
             {flagged ? "Đã đánh dấu" : "Đánh dấu xem lại"}
           </button>
-          {onReportQuestion && (
-            <ReportQuestionButton questionNumber={index + 1}
-              onSend={(content) => onReportQuestion(q.id, content)} />
-          )}
-          </div>
         </div>
 
         {/* Nội dung câu hỏi. AD-98: nếu có `blocks` (đề nạp mới) → render chữ ↔ ảnh

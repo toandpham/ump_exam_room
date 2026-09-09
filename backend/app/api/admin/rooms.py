@@ -417,26 +417,21 @@ async def my_rooms(
             select(func.count(Candidate.id)).where(Candidate.room_id == r.id)) or 0)
         # Đồng hồ thi CHUNG (AD-78): deadline sớm nhất của các phiên đang làm trong
         # buổi active — giống hệt roster của chủ tịch nên 2 màn hiện cùng 1 giờ.
-        cohort_end_time = cohort_last_end_time = None
+        cohort_end_time = None
         if active is not None:
-            # BỎ phiên đang tạm dừng: đồng hồ của họ đóng băng nên end_time cũ không
-            # phản ánh thời gian thực (lỗ AD-121 #3). Giống hệt roster của chủ tịch
-            # nên hai màn luôn hiện cùng một giờ.
-            cohort_end_time, cohort_last_end_time = (await db.execute(
-                select(func.min(ExamSession.end_time), func.max(ExamSession.end_time)).where(
+            cohort_end_time = await db.scalar(
+                select(func.min(ExamSession.end_time)).where(
                     ExamSession.sitting_id == active.id,
                     ExamSession.status == SessionStatus.IN_PROGRESS.value,
-                    ExamSession.paused_at.is_(None),
                     ExamSession.end_time.is_not(None),
                 )
-            )).one()
+            )
         out.append(MyRoomOut(
             room_id=r.id, room_name=r.name, exam_id=exam.id, exam_name=exam.name,
             exam_status=exam.status,
             active_sitting_id=active.id if active else None,
             candidate_count=count,
             cohort_end_time=cohort_end_time,
-            cohort_last_end_time=cohort_last_end_time,
             server_time=now,
         ))
     return out

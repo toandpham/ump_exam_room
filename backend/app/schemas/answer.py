@@ -17,9 +17,6 @@ class AnswerIn(BaseModel):
 class AnswersBulkIn(BaseModel):
     # AD-69: client gộp đáp án đẩy theo LÔ (giảm số request xuống server cho ~1000 máy).
     answers: list[AnswerIn]
-    # Số câu thí sinh đã xem tới, ghép vào chính nhịp đẩy này để không tốn thêm
-    # request. Máy chủ chỉ nhận theo chiều TIẾN (xem mã xử lý).
-    viewed_count: int | None = Field(default=None, ge=0)
 
 
 class AnswersBulkOut(BaseModel):

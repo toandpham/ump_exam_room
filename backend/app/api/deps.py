@@ -18,7 +18,7 @@ from app.core.security import decode_token
 from app.database import get_db
 from app.models import Admin, Candidate, ExamSession, Room, Sitting
 from app.models import Exam
-from app.models.enums import FINALISED_STATUSES, AdminRole
+from app.models.enums import AdminRole, SessionStatus
 
 bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -221,7 +221,7 @@ async def get_current_candidate(
             .order_by(ExamSession.created_at.desc())
             .limit(1)
         )
-        if latest_status not in FINALISED_STATUSES:
+        if latest_status not in (SessionStatus.SUBMITTED.value, SessionStatus.TIMEOUT.value):
             raise _device_superseded_exc
     else:
         # Heartbeat: keep this device marked live.

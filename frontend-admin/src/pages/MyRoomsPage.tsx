@@ -130,7 +130,7 @@ function RoomBlock({ room }: { room: MyRoom }) {
         <div className="flex items-center gap-2">
           {/* AD-124: nút "Thêm thí sinh" đã GỠ — giám thị chỉ Tạm dừng / Tiếp tục
               bài thi; danh sách dự thi là trách nhiệm của chủ tịch. */}
-          <ExamCountdown endTime={room.cohort_end_time} lastEndTime={room.cohort_last_end_time} serverTime={room.server_time} />
+          <ExamCountdown endTime={room.cohort_end_time} serverTime={room.server_time} />
           <button
             onClick={() => {
               if (confirm(

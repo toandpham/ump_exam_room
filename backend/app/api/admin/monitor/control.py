@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import exam_for_admin, sitting_for_admin
@@ -153,56 +153,16 @@ async def _finalize_in_progress(db: AsyncSession, sitting: Sitting) -> int:
     return done
 
 
-async def _unfinished_counts(db: AsyncSession, sitting_id: uuid.UUID) -> tuple[int, int]:
-    """(số người CÒN GIỜ, số người ĐANG TẠM DỪNG) trong các phiên đang làm bài.
-
-    Hai nhóm này là những người sẽ bị CẮT BÀI GIỮA CHỪNG nếu đóng buổi ngay."""
-    now = datetime.now(timezone.utc)
-    running = (ExamSession.sitting_id == sitting_id,
-               ExamSession.status == SessionStatus.IN_PROGRESS.value)
-    with_time = await db.scalar(
-        select(func.count(ExamSession.id)).where(
-            *running, ExamSession.paused_at.is_(None),
-            ExamSession.end_time.is_not(None), ExamSession.end_time > now)
-    ) or 0
-    paused = await db.scalar(
-        select(func.count(ExamSession.id)).where(*running, ExamSession.paused_at.is_not(None))
-    ) or 0
-    return with_time, paused
-
-
 @router.post("/sittings/{sitting_id}/end", response_model=EndResult)
 async def end_sitting(
     sitting_id: uuid.UUID,
-    force: bool = False,
     db: AsyncSession = Depends(get_db),
     admin: Admin = Depends(_require_proctor),
 ) -> EndResult:
     """Đóng buổi thi: force-submit + score all still-running sessions, then purge
     the sitting's đề (Redis payload + DB ciphertext) and mark it closed. Results +
-    answers stay; ``report_snapshot`` + ``question_count`` survive for reports.
-
-    Chốt chặn (lỗ AD-121 #1): nếu còn thí sinh CÒN GIỜ hoặc ĐANG TẠM DỪNG thì trả
-    409 nêu rõ số người, trừ khi ``force=true``. Chủ tịch vẫn phải đóng được trong
-    mọi tình huống (máy treo, phòng đã về) — cơ chế đúng là bắt nhìn thấy hậu quả
-    rồi mới cho làm, không phải cấm. Giao diện tự tính hai con số này từ danh sách
-    phiên (poll 8s) để hộp xác nhận nói đúng số người TRƯỚC khi bấm; 409 ở đây là
-    chốt chặn thứ hai, phòng khi giao diện đang chạy bản cũ.
-    """
+    answers stay; ``report_snapshot`` + ``question_count`` survive for reports."""
     sitting = await sitting_for_admin(db, sitting_id, admin)
-    if not force:
-        with_time, paused = await _unfinished_counts(db, sitting_id)
-        if with_time or paused:
-            parts = []
-            if with_time:
-                parts.append(f"{with_time} thí sinh CÒN GIỜ làm bài")
-            if paused:
-                parts.append(f"{paused} thí sinh đang TẠM DỪNG")
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                "Đóng buổi bây giờ sẽ cắt bài giữa chừng: " + " và ".join(parts)
-                + ". Hãy chờ họ nộp xong (hoặc xác nhận đóng bằng mọi giá).",
-            )
     n = await _finalize_in_progress(db, sitting)
     db.add(session_service.make_event(event_type=EventType.EXAM_END.value,
                                       metadata={"sitting_id": str(sitting_id), "submitted": n}))

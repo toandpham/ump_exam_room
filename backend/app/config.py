@@ -33,8 +33,6 @@ class Settings(BaseSettings):
 
     # Uploads
     upload_dir: str = "/app/uploads"
-    # Thư mục sao lưu, gắn từ máy chủ (dùng chung với scripts/backup.sh).
-    backup_dir: str = "/backups"
     max_upload_mb: int = 20
 
     # AD-91 — CHỈ cho thi bằng phần mềm kiosk; trình duyệt thường bị 403.

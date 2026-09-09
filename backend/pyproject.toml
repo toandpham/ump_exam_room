@@ -40,11 +40,6 @@ dependencies = [
     "msoffcrypto-tool>=5.4",
     "reportlab>=4.2",
     "pillow>=11.0",
-    # Đọc phiếu trả lời giấy (OMR): numpy cho xử lý ma trận điểm ảnh,
-    # pypdfium2 để dựng PDF đã quét thành ảnh (tự chứa, không cần cài
-    # poppler ở hệ điều hành).
-    "numpy>=2.0",
-    "pypdfium2>=4.30",
 ]
 
 [project.optional-dependencies]

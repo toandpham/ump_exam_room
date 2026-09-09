@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,11 +33,5 @@ class Answer(Base):
     answered_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    # Dữ liệu hành vi (hậu kiểm, KHÔNG dùng để chấm điểm). ``answered_at`` bị ghi đè
-    # mỗi lần đổi đáp án nên không cho biết lúc quyết định đầu tiên; hai cột này giữ
-    # lại điều đó.
-    first_answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    change_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0,
-                                              server_default="0")
 
     session: Mapped["ExamSession"] = relationship(back_populates="answers")

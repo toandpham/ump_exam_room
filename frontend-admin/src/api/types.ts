@@ -54,9 +54,7 @@ export interface MyRoom {
   exam_status: string;
   active_sitting_id: string | null;
   candidate_count: number;
-  cohort_end_time: string | null;
-  /** Mốc người xong muộn nhất (vào trễ / cộng giờ riêng). */
-  cohort_last_end_time: string | null;   // đồng hồ thi chung (AD-78)
+  cohort_end_time: string | null;   // đồng hồ thi chung (AD-78)
   server_time: string | null;
 }
 

@@ -20,9 +20,9 @@ from app.api.deps import (
 from app.core import device_lock
 from app.core.redis import redis_client
 from app.database import get_db
-from app.models import Admin, ExamSession, Sitting
+from app.models import Admin, ExamSession
 from app.models.enums import EventType, SessionStatus
-from app.schemas.monitor import ExtendRequest, StartResult, TerminateRequest
+from app.schemas.monitor import StartResult
 from app.services import session_service
 from app.websocket.manager import manager
 
@@ -137,85 +137,6 @@ async def resume_all(
     await db.commit()
     await manager.publish("exam", "exam_resumed", exam_id=sitting.exam_id)
     return {"resumed": len(sessions)}
-
-
-# --- cộng giờ / đình chỉ cho MỘT thí sinh ------------------------------------
-
-@router.post("/sessions/{session_id}/extend")
-async def extend_session(
-    session_id: uuid.UUID,
-    body: ExtendRequest,
-    db: AsyncSession = Depends(get_db),
-    admin: Admin = Depends(_require_proctor),
-) -> dict:
-    """Cộng giờ cho RIÊNG một thí sinh.
-
-    Vì sao cần: trước đây chỉ cộng được cho cả buổi, nên một máy treo mười phút là
-    cả phòng được thêm giờ. Đồng hồ vốn đã per-candidate (AD-47) nên dời end_time
-    của riêng một phiên là đủ.
-
-    Dùng được cả khi đồng hồ ĐÃ về 0 (mở lại làm tiếp) — đúng tình huống hay gặp:
-    máy hỏng, sửa xong thì đã quá giờ. Quyền: chủ tịch. Cố ý KHÔNG mở cho giám thị,
-    giữ nguyên phạm vi Tạm dừng / Tiếp tục của họ (AD-124).
-    """
-    session = await db.get(ExamSession, session_id)
-    if session is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Không tìm thấy phiên thi")
-    await exam_for_admin(db, session.exam_id, admin)  # ownership gate
-    if session.status != SessionStatus.IN_PROGRESS.value:
-        raise HTTPException(status.HTTP_409_CONFLICT,
-                            "Chỉ cộng giờ được cho thí sinh đang làm bài.")
-    if session.end_time is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Phiên thi chưa có mốc hết giờ.")
-    session.end_time = session.end_time + timedelta(minutes=body.minutes)
-    db.add(session_service.make_event(
-        event_type=EventType.START.value, session_id=session.id,
-        metadata={"action": "extend_session", "minutes": body.minutes,
-                  "admin": admin.username, "candidate_id": str(session.candidate_id)}))
-    await db.commit()
-    return {"extended": True, "minutes": body.minutes, "end_time": session.end_time}
-
-
-@router.post("/sessions/{session_id}/terminate")
-async def terminate_session(
-    session_id: uuid.UUID,
-    body: TerminateRequest,
-    db: AsyncSession = Depends(get_db),
-    admin: Admin = Depends(_require_proctor),
-) -> dict:
-    """Đình chỉ thi một thí sinh: dừng hẳn bài, chấm với những gì đã làm.
-
-    Trước đây không có đường nào làm việc này — Tạm dừng thì còn tiếp tục được,
-    Đăng xuất thì giữ nguyên phiên để họ vào máy khác làm tiếp. Bắt được thí sinh
-    gian lận là phải chốt bài tại chỗ.
-
-    Trạng thái riêng ``terminated`` (không dùng lại ``submitted``) để hội đồng phân
-    biệt được trong báo cáo và nhật ký; lý do lưu vào ``terminated_reason``. Bài vẫn
-    được chấm + niêm phong hash như mọi bài, nên kiểm tra toàn vẹn vẫn phủ nó.
-    """
-    session = await db.get(ExamSession, session_id)
-    if session is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Không tìm thấy phiên thi")
-    await exam_for_admin(db, session.exam_id, admin)  # ownership gate
-    if session.status != SessionStatus.IN_PROGRESS.value:
-        raise HTTPException(status.HTTP_409_CONFLICT,
-                            "Chỉ đình chỉ được thí sinh đang làm bài.")
-    sitting = await db.get(Sitting, session.sitting_id)
-    correct_map = await session_service.correct_map_for_sitting(db, redis_client, sitting)
-    session.status = SessionStatus.TERMINATED.value
-    session.submitted_at = datetime.now(timezone.utc)
-    session.paused_at = None
-    session.terminated_reason = body.reason
-    await session_service.score_session(db, session, correct_map)
-    db.add(session_service.make_event(
-        event_type=EventType.TERMINATED.value, session_id=session.id,
-        metadata={"admin": admin.username, "candidate_id": str(session.candidate_id),
-                  "reason": body.reason}))
-    await db.commit()
-    await manager.publish("admin", "candidate_terminated", exam_id=session.exam_id,
-                          session_id=session.id,
-                          data={"candidate_id": str(session.candidate_id)})
-    return {"terminated": True, "reason": body.reason}
 
 
 # --- single-session actions -------------------------------------------------

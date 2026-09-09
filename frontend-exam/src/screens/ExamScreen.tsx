@@ -25,8 +25,7 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
   // Nộp/hết giờ → xoá giấy nháp của phiên rồi chuyển sang màn kết quả.
   const handleSubmitted = () => { clearNotes(sessionId); onSubmitted(); };
   const { answers, selectOption, flags, toggleFlag, saveStatus, secondsLeft, paused, timeUp,
-          doSubmit, submitting, tabCount, submitError, clearSubmitError, reportQuestion,
-          markViewed } =
+          doSubmit, submitting, tabCount, submitError, clearSubmitError } =
     useExamSession(sessionId, data, handleSubmitted, ws);
 
   // AD-90/AD-110: CHEN HÀNG vài câu KẾ TIẾP lên trước hàng đợi nền. Toàn bộ đề đã
@@ -35,10 +34,7 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
   useEffect(() => {
     if (!data) return;
     preloadImages(imageUrlsOf(data.questions.slice(current + 1, current + 1 + PRELOAD_AHEAD)));
-    // Ghi nhận đã xem tới câu này — gửi ghép vào nhịp đẩy đáp án sẵn có. Cho chủ
-    // tịch biết thí sinh đã xem hết đề chưa (khác với đã trả lời bao nhiêu câu).
-    markViewed(current + 1);
-  }, [current, data, markViewed]);
+  }, [current, data]);
 
   // Jump to the next still-unanswered question, scanning forward from the
   // current position and wrapping back to the start. Lets candidates triage hard
@@ -170,7 +166,6 @@ export default function ExamScreen({ sessionId, onSubmitted, ws }: { sessionId: 
             onNext={goNext}
             onJumpUnanswered={goToNextUnanswered}
             onSubmit={confirmSubmit}
-            onReportQuestion={reportQuestion}
           />
         </main>
 

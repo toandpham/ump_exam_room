@@ -5,11 +5,7 @@ from __future__ import annotations
 import secrets
 import uuid
 
-import logging
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,9 +17,7 @@ from app.models.enums import AdminRole, SessionStatus
 from app.schemas.auth import AdminCreate, AdminSummary, PasswordSet
 from app.schemas.monitor import SecurityEventOut
 from app.schemas.room import RoomProctorCreate
-from app.services import backup_service, server_metrics
-
-logger = logging.getLogger("exam.admin")
+from app.services import server_metrics
 
 router = APIRouter()
 
@@ -223,38 +217,3 @@ async def reset_room_proctor_pin(
     await db.commit()
     return {"id": str(target.id), "username": target.username,
             "full_name": target.full_name, "pin": pin}
-
-
-# --- sao lưu (đợt 5) ---------------------------------------------------------
-# KHÔNG có khôi phục ở đây, có chủ ý — xem chú thích đầu ``backup_service``.
-
-@router.get("/backups")
-async def list_backups(_: Admin = Depends(_super_only)) -> dict:
-    """Các bản sao lưu hiện có + tuổi của bản mới nhất.
-
-    ``latest_age_seconds`` để trang cảnh báo khi sao lưu tự động đã ngừng chạy —
-    trước đây không có cách nào biết điều đó cho tới lúc cần khôi phục."""
-    files = backup_service.list_backups()
-    age = None
-    if files:
-        age = int((datetime.now(timezone.utc) - files[0]["created_at"]).total_seconds())
-    return {"files": files, "latest_age_seconds": age}
-
-
-@router.post("/backups")
-async def create_backup(admin: Admin = Depends(_super_only)) -> dict:
-    """Tạo một bản sao lưu ngay (nên bấm trước mỗi buổi thi)."""
-    try:
-        return await backup_service.create_backup()
-    except Exception as exc:  # noqa: BLE001 — báo nguyên văn lỗi pg_dump cho người vận hành
-        logger.error("Sao lưu thất bại (%s): %s", admin.username, exc)
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            f"Sao lưu thất bại: {exc}") from exc
-
-
-@router.get("/backups/{name}")
-async def download_backup(name: str, _: Admin = Depends(_super_only)) -> FileResponse:
-    path = backup_service.resolve_backup(name)
-    if path is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Không tìm thấy bản sao lưu")
-    return FileResponse(path, media_type="application/gzip", filename=name)

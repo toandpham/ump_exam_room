@@ -79,9 +79,7 @@ class MyRoomOut(BaseModel):
     exam_status: str
     active_sitting_id: uuid.UUID | None = None
     candidate_count: int = 0
-    # Đồng hồ thi (AD-78): mốc của người xong SỚM NHẤT và MUỘN NHẤT trong buổi active.
-    # Cả hai bỏ qua phiên đang tạm dừng (đồng hồ đóng băng — lỗ AD-121 #3). Hai mốc
-    # lệch nhau khi có người vào trễ / được cộng giờ riêng. + giờ server để neo đếm ngược.
+    # Đồng hồ thi CHUNG (AD-78): deadline sớm nhất của các phiên đang làm trong buổi
+    # active (cả phòng bắt đầu cùng lúc → chung 1 mốc) + giờ server để neo đếm ngược.
     cohort_end_time: datetime | None = None
-    cohort_last_end_time: datetime | None = None
     server_time: datetime | None = None

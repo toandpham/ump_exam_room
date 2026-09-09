@@ -13,11 +13,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Answer, Candidate, Exam, ExamSession
-from app.models.enums import FINALISED_STATUSES
+from app.models.enums import SessionStatus
 from app.models.room import Room
 from app.services import session_service
 
-_SUBMITTED = tuple(FINALISED_STATUSES)
+_SUBMITTED = (SessionStatus.SUBMITTED.value, SessionStatus.TIMEOUT.value)
 
 
 async def get_answer_key(redis, sitting) -> dict[str, dict]:

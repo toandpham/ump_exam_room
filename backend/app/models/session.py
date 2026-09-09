@@ -57,12 +57,6 @@ class ExamSession(Base):
     # session's end_time forward by (now - paused_at) and clears it to NULL.
     paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Số câu thí sinh đã từng xem tới (máy báo về, ghép vào nhịp đẩy đáp án sẵn có).
-    # Cho biết "đã xem hết đề chưa" — khác với "đã trả lời bao nhiêu câu".
-    viewed_count: Mapped[int | None] = mapped_column(Integer)
-    # Lý do chủ tịch đình chỉ thi (status = ``terminated``). Bài vẫn được chấm với
-    # những gì đã làm; cột này để hội đồng tra lại vì sao.
-    terminated_reason: Mapped[str | None] = mapped_column(String(255))
     score: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
     total_correct: Mapped[int | None] = mapped_column(Integer)
     # SHA-256 over the canonical result fields — see ``session_service.compute_results_hash``.

@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, BarChart3, FileText, MonitorPlay, Play, Power, Printer, ShieldAlert } from "lucide-react";
+import { ArrowLeft, BarChart3, FileText, MonitorPlay, Play, Power } from "lucide-react";
 import { sittingsApi } from "../api/sittings";
 import { errorMessage } from "../api/client";
 import StatusBadge from "../components/StatusBadge";
@@ -9,8 +9,6 @@ const TABS = [
   { to: "exam",    label: "Đề thi",   icon: FileText,    end: false },
   { to: "monitor", label: "Giám sát", icon: MonitorPlay, end: false },
   { to: "reports", label: "Báo cáo",  icon: BarChart3,   end: false },
-  { to: "collusion", label: "Đối chiếu", icon: ShieldAlert, end: false },
-  { to: "paper", label: "Dự phòng giấy", icon: Printer, end: false },
 ];
 
 export default function SittingDetailPage() {
@@ -33,50 +31,13 @@ export default function SittingDetailPage() {
   };
 
   const openMut = useMutation({ mutationFn: () => sittingsApi.open(sittingId), onSuccess: invalidate });
-  const endMut = useMutation({
-    mutationFn: (force: boolean) => sittingsApi.end(sittingId, force),
-    onSuccess: invalidate,
-  });
-
-  // Dùng CHUNG khoá với màn Giám sát (TanStack gộp request) — không thêm tải.
-  // Cần ở đây để hộp xác nhận nói đúng SỐ NGƯỜI sắp bị cắt bài trước khi bấm.
-  const { data: sessions = [] } = useQuery({
-    queryKey: ["sessions", sittingId],
-    queryFn: () => sittingsApi.sessions(sittingId),
-    enabled: !!sittingId && sitting?.status === "active",
-    refetchInterval: 8000,
-  });
+  const endMut = useMutation({ mutationFn: () => sittingsApi.end(sittingId), onSuccess: invalidate });
 
   if (isLoading) return <p className="text-slate-400">Đang tải buổi thi…</p>;
   if (!sitting) return <p className="text-rose-600">Không tìm thấy buổi thi.</p>;
 
   const canOpen = sitting.status === "draft" && sitting.has_payload;
   const isActive = sitting.status === "active";
-
-  const now = Date.now();
-  const running = sessions.filter((s) => s.status === "in_progress");
-  const withTime = running.filter(
-    (s) => !s.paused && s.end_time !== null && new Date(s.end_time).getTime() > now).length;
-  const pausedNow = running.filter((s) => s.paused).length;
-  const wouldCut = withTime + pausedNow;
-
-  const confirmEnd = () => {
-    const tail =
-      "\n\nHệ thống sẽ tự nộp + chấm các bài đang làm, XOÁ ĐỀ khỏi server và đóng buổi "
-      + "(không mở lại được). Kết quả + báo cáo vẫn giữ.";
-    if (wouldCut === 0) {
-      if (confirm("Đóng buổi thi này?" + tail)) endMut.mutate(false);
-      return;
-    }
-    const who = [
-      withTime ? `${withTime} thí sinh CÒN GIỜ làm bài` : "",
-      pausedNow ? `${pausedNow} thí sinh đang TẠM DỪNG` : "",
-    ].filter(Boolean).join(" và ");
-    if (confirm(`⚠️ ĐANG CÒN ${who}.\n\nĐóng buổi bây giờ sẽ CẮT BÀI GIỮA CHỪNG của họ — `
-      + `bài được chấm với những gì đã làm tới lúc này.${tail}\n\nVẫn đóng buổi?`)) {
-      endMut.mutate(true);
-    }
-  };
 
   return (
     <div>
@@ -96,16 +57,13 @@ export default function SittingDetailPage() {
             </button>
           )}
           {isActive && (
-            <button onClick={confirmEnd} disabled={endMut.isPending}
-              title={wouldCut > 0 ? `Còn ${wouldCut} thí sinh chưa xong — đóng bây giờ sẽ cắt bài của họ` : undefined}
+            <button onClick={() => {
+              if (confirm("Đóng buổi thi này?\n\nHệ thống sẽ tự nộp + chấm các bài đang làm, XOÁ ĐỀ khỏi server và đóng buổi (không mở lại được). Kết quả + báo cáo vẫn giữ.")) endMut.mutate();
+            }}
+              disabled={endMut.isPending}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 disabled:opacity-60">
               <Power size={15} /> {endMut.isPending ? "Đang đóng…" : "Đóng buổi"}
             </button>
-          )}
-          {isActive && wouldCut > 0 && (
-            <span className="text-xs text-amber-700 bg-amber-50 border border-amber-300 rounded px-2 py-1">
-              ⚠️ còn {wouldCut} thí sinh chưa xong
-            </span>
           )}
         </div>
         {sitting.description && <p className="text-sm text-slate-500 mt-1">{sitting.description}</p>}

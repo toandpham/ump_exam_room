@@ -94,14 +94,9 @@ export const examApi = {
   answer: async (question_id: string, selected_option: string | null) =>
     (await api.post("/exam/answer", { question_id, selected_option })).data,
   // AD-69: đẩy đáp án theo LÔ (giảm số request xuống server).
-  answersBulk: async (answers: { question_id: string; selected_option: string | null }[],
-                      viewedCount?: number) =>
-    (await api.post("/exam/answers",
-      viewedCount === undefined ? { answers } : { answers, viewed_count: viewedCount })).data,
+  answersBulk: async (answers: { question_id: string; selected_option: string | null }[]) =>
+    (await api.post("/exam/answers", { answers })).data,
   submit: async () => (await api.post("/exam/submit")).data,
-  /** Thí sinh báo một câu hỏi có vấn đề — lưu cùng bài để hội đồng đọc lúc chấm. */
-  reportQuestion: async (questionId: string, content: string) =>
-    (await api.post("/exam/question-report", { question_id: questionId, content })).data,
   result: async (): Promise<{ status: string; submitted_at: string | null; total: number; answered: number; total_correct: number }> =>
     (await api.get("/exam/result")).data,
 };

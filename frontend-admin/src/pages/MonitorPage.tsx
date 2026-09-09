@@ -9,11 +9,9 @@ import type { Sitting } from "../api/types";
 import StatusBadge from "../components/StatusBadge";
 import ExamCountdown from "../components/ExamCountdown";
 import DisconnectAlerts from "../components/DisconnectAlerts";
-import StuckPausedAlerts from "../components/StuckPausedAlerts";
 import SessionTable from "./monitor/SessionTable";
 import StatFilters from "./monitor/StatFilters";
 import StartExamControls from "./monitor/StartExamControls";
-import QuestionReportsPanel from "./monitor/QuestionReportsPanel";
 import type { Filter, DisplayRow } from "./monitor/constants";
 
 interface Ctx { examId: string; sittingId: string; sitting: Sitting }
@@ -42,13 +40,6 @@ export default function MonitorPage() {
     () => sessions.filter((s: SessionSummary) => s.offline).map((s: SessionSummary) => ({
       key: s.session_id, full_name: s.full_name, cccd: s.cccd,
       room_name: s.room_name, last_seen_seconds: s.last_seen_seconds,
-    })),
-    [sessions],
-  );
-  // Tạm dừng mà đã quá giờ: vòng quét tự nộp bỏ qua họ nên bài treo mãi (AD-121 #2).
-  const stuckRows = useMemo(
-    () => sessions.filter((s: SessionSummary) => s.overdue_paused).map((s: SessionSummary) => ({
-      key: s.session_id, full_name: s.full_name, cccd: s.cccd, room_name: s.room_name,
     })),
     [sessions],
   );
@@ -98,18 +89,6 @@ export default function MonitorPage() {
     onSuccess: () => { invalidate(); flash("▶ Đã tiếp tục bài thi của thí sinh."); },
     onError: () => flash("Tiếp tục thất bại.", "err"),
   });
-  const extendCand = useMutation({
-    mutationFn: ({ id, minutes }: { id: string; minutes: number }) =>
-      monitorApi.extendSession(id, minutes),
-    onSuccess: (_r, v) => { invalidate(); flash(`⏱ Đã cộng ${v.minutes} phút cho thí sinh này.`); },
-    onError: (e) => flash(errorMessage(e, "Cộng giờ thất bại"), "err"),
-  });
-  const terminateCand = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      monitorApi.terminateSession(id, reason),
-    onSuccess: () => { invalidate(); flash("⛔ Đã đình chỉ thi — bài được chấm với phần đã làm."); },
-    onError: (e) => flash(errorMessage(e, "Đình chỉ thất bại"), "err"),
-  });
   const pauseAll = useMutation({ mutationFn: () => sittingsApi.pauseAll(selectedId) });
   const resumeAll = useMutation({ mutationFn: () => sittingsApi.resumeAll(selectedId) });
 
@@ -145,9 +124,7 @@ export default function MonitorPage() {
           Giám sát <Wifi size={16} className="text-green-500" />
         </h2>
         <div className="flex items-center gap-3">
-          <ExamCountdown endTime={roster?.earliest_end_time ?? null}
-            lastEndTime={roster?.latest_end_time ?? null}
-            serverTime={roster?.server_time ?? null} />
+          <ExamCountdown endTime={roster?.earliest_end_time ?? null} serverTime={roster?.server_time ?? null} />
           <StatusBadge status={sitting.status} hasRunningSessions={hasRunning} />
         </div>
       </div>
@@ -155,12 +132,6 @@ export default function MonitorPage() {
       {offlineRows.length > 0 && (
         <div className="mb-3"><DisconnectAlerts rows={offlineRows} /></div>
       )}
-
-      {stuckRows.length > 0 && (
-        <div className="mb-3"><StuckPausedAlerts rows={stuckRows} /></div>
-      )}
-
-      <QuestionReportsPanel sittingId={selectedId} />
 
       {!isActive && (
         <p className="mb-3 text-sm bg-slate-50 text-slate-700 border border-slate-200 px-3 py-2 rounded">
@@ -228,28 +199,6 @@ export default function MonitorPage() {
         onAdmit={(s: SessionSummary) => { if (confirm(`Duyệt "${s.full_name}" vào thi?\n\nThí sinh đi trễ sẽ vào làm bài NGAY. Màn hình của họ tự vào đề sau vài giây.`)) admitCand.mutate(s.session_id); }}
         onPause={(s: SessionSummary) => pauseCand.mutate(s.session_id)}
         onResume={(s: SessionSummary) => resumeCand.mutate(s.session_id)}
-        onExtend={(s: SessionSummary) => {
-          const raw = prompt(`Cộng thêm bao nhiêu phút cho "${s.full_name}"?\n\n`
-            + "Chỉ thí sinh này được thêm giờ — cả phòng không đổi.", "10");
-          if (raw === null) return;
-          const minutes = Number(raw.trim());
-          if (!Number.isInteger(minutes) || minutes < 1 || minutes > 180) {
-            flash("Số phút phải là số nguyên từ 1 đến 180.", "err");
-            return;
-          }
-          extendCand.mutate({ id: s.session_id, minutes });
-        }}
-        onTerminate={(s: SessionSummary) => {
-          const reason = prompt(`ĐÌNH CHỈ THI "${s.full_name}"?\n\n`
-            + "Bài sẽ dừng hẳn và được chấm với những gì đã làm. Không hoàn tác được.\n\n"
-            + "Nhập lý do (bắt buộc, sẽ lưu vào nhật ký):", "");
-          if (reason === null) return;
-          if (reason.trim().length < 3) {
-            flash("Phải ghi lý do đình chỉ (ít nhất 3 ký tự).", "err");
-            return;
-          }
-          terminateCand.mutate({ id: s.session_id, reason: reason.trim() });
-        }}
       />
     </div>
   );

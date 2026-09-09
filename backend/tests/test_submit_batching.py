@@ -107,7 +107,7 @@ async def test_end_sitting_isolates_one_bad_session(client, factory, monkeypatch
 
     monkeypatch.setattr(session_service, "score_session", flaky)
 
-    r = await client.post(f"/api/admin/sittings/{sitting.id}/end?force=true", headers=auth(ptok))
+    r = await client.post(f"/api/admin/sittings/{sitting.id}/end", headers=auth(ptok))
     assert r.status_code == 200, r.text
 
     st = await _statuses(sitting.id)

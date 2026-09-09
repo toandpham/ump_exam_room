@@ -12,19 +12,7 @@ export interface SessionSummary {
   photo_path: string | null;
   status: string;
   submitted_at: string | null;
-  /** Mốc hết giờ RIÊNG của thí sinh này (đồng hồ là per-candidate, AD-47). */
-  end_time: string | null;
   paused: boolean;
-  /** Tiến độ làm bài: đã trả lời / đã xem tới câu / tổng số câu trong đề. */
-  answered_count: number;
-  viewed_count: number | null;
-  question_total: number;
-  /** Số khiếu nại câu hỏi CHƯA xử lý của thí sinh này. */
-  open_question_reports: number;
-  /** Lý do bị đình chỉ thi (status = 'terminated'). */
-  terminated_reason: string | null;
-  /** Đang tạm dừng VÀ đã quá end_time — bài sẽ không bao giờ tự nộp (AD-121 #2). */
-  overdue_paused: boolean;
   self_registered: boolean;
   room_id: string | null;
   room_name: string | null;
@@ -58,8 +46,6 @@ export interface RosterResponse {
   not_logged_in: RosterCandidate[];
   // Đồng hồ thi chung (AD-78): deadline sớm nhất trong các phiên đang làm + giờ server.
   earliest_end_time: string | null;
-  /** Mốc của người kết thúc muộn nhất (vào trễ / cộng giờ riêng). */
-  latest_end_time: string | null;
   server_time: string | null;
 }
 
@@ -76,45 +62,4 @@ export const monitorApi = {
     (await api.post(`/admin/sessions/${sessionId}/logout`)).data,
   admit: async (sessionId: string) =>
     (await api.post(`/admin/sessions/${sessionId}/admit`)).data,
-  /** Cộng giờ cho RIÊNG một thí sinh (máy treo/hỏng) — không đụng cả phòng. */
-  extendSession: async (sessionId: string, minutes: number) =>
-    (await api.post(`/admin/sessions/${sessionId}/extend`, { minutes })).data,
-  /** Đình chỉ thi: dừng hẳn bài, chấm với những gì đã làm. Lý do bắt buộc. */
-  terminateSession: async (sessionId: string, reason: string) =>
-    (await api.post(`/admin/sessions/${sessionId}/terminate`, { reason })).data,
-  /** Khiếu nại câu hỏi của thí sinh trong buổi này (chưa xử lý lên trước). */
-  questionReports: async (sittingId: string): Promise<QuestionReport[]> =>
-    (await api.get(`/admin/sittings/${sittingId}/question-reports`)).data,
-  resolveQuestionReport: async (reportId: string, resolution: string) =>
-    (await api.post(`/admin/question-reports/${reportId}/resolve`, { resolution })).data,
-  /** Cặp thí sinh cùng phòng có nhiều câu sai giống hệt nhau (hậu kiểm). */
-  collusion: async (sittingId: string): Promise<CollusionPair[]> =>
-    (await api.get(`/admin/sittings/${sittingId}/collusion`)).data,
 };
-
-export interface QuestionReport {
-  id: string;
-  candidate_id: string;
-  cccd: string;
-  full_name: string;
-  room_name: string | null;
-  question_id: string;
-  /** Số thứ tự câu TRONG ĐỀ CỦA THÍ SINH ĐÓ (đề trộn nên mỗi người một thứ tự). */
-  question_number: number;
-  content: string;
-  created_at: string;
-  resolved_at: string | null;
-  resolution: string | null;
-  resolved_by_name: string | null;
-}
-
-export interface CollusionPair {
-  a_candidate_id: string; a_cccd: string; a_name: string;
-  b_candidate_id: string; b_cccd: string; b_name: string;
-  room_name: string | null;
-  /** Số câu hai bài cùng chọn MỘT ĐÁP ÁN SAI. */
-  shared_wrong: number;
-  wrong_a: number; wrong_b: number;
-  /** shared_wrong / số câu sai của người sai ít hơn. */
-  ratio: number;
-}

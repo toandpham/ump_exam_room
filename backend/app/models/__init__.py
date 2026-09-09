@@ -8,7 +8,6 @@ from app.models.enums import AdminRole, EventType, ExamStatus, SessionStatus, Si
 from app.models.event import ExamEvent
 from app.models.exam import Exam
 from app.models.license import SystemLicense
-from app.models.question_report import QuestionReport
 from app.models.room import Room
 from app.models.session import ExamSession
 from app.models.sitting import Sitting
@@ -21,7 +20,6 @@ __all__ = [
     "Exam",
     "ExamEvent",
     "ExamSession",
-    "QuestionReport",
     "Room",
     "Sitting",
     "SystemLicense",

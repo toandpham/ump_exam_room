@@ -58,10 +58,7 @@ export const sittingsApi = {
   start: async (id: string) => (await api.post(`/admin/sittings/${id}/start`)).data,
   pauseAll: async (id: string) => (await api.post(`/admin/sittings/${id}/pause-all`)).data,
   resumeAll: async (id: string) => (await api.post(`/admin/sittings/${id}/resume-all`)).data,
-  /** ``force`` bỏ qua chốt chặn "còn người đang làm bài" (AD-121 #1) — chỉ dùng
-   * sau khi người dùng đã xác nhận đúng số người sẽ bị cắt bài. */
-  end: async (id: string, force = false) =>
-    (await api.post(`/admin/sittings/${id}/end${force ? "?force=true" : ""}`)).data,
+  end: async (id: string) => (await api.post(`/admin/sittings/${id}/end`)).data,
   integrity: async (id: string): Promise<IntegrityResult> =>
     (await api.get(`/admin/sittings/${id}/integrity`)).data,
   sessions: async (id: string): Promise<SessionSummary[]> =>
