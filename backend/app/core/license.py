@@ -38,13 +38,15 @@ WARN_DAYS = 14
 # Key gia hạn chỉ để đẩy hạn ra xa hơn mốc dùng thử này.
 TRIAL_DAYS = 90
 
-# AD-126: hạn dùng thử CHUNG cho mọi trường — mốc cố định thay cho "90 ngày kể từ
-# ngày cài" (mỗi nơi một hạn khác nhau, khó theo dõi). Lấy min() của hai mốc nên:
-#   • trường cài giữa tháng 7 (90 ngày sẽ tới tháng 10) → rút về mốc này;
-#   • trường đã hết dùng thử từ trước → KHÔNG được kéo dài thêm.
-# Trường đã mua key gia hạn KHÔNG bị ảnh hưởng (key còn hạn luôn được ưu tiên).
+# AD-126 từng chốt MỌI bản dùng thử ở mốc cố định này, thay cho "90 ngày kể từ ngày
+# cài". Mốc đó nay đã nằm trong QUÁ KHỨ, nên nếu còn áp cho mọi máy thì bản cài mới
+# sẽ bị khoá ngay từ phút đầu — chính là lỗi cần sửa.
+#
+# Giữ lại nhưng thu hẹp: mốc CHỈ áp cho những máy đã cài TRƯỚC nó (lứa trường của
+# đợt thi đó — đang khoá thì vẫn khoá, phải mua key gia hạn). Máy cài từ mốc này trở
+# đi hưởng trọn TRIAL_DAYS kể từ ngày cài.
 # Giờ Việt Nam (UTC+7) — hết ngày 15/8, không phải hết ngày theo giờ UTC.
-TRIAL_END = datetime(2026, 8, 15, 23, 59, 59, tzinfo=timezone(timedelta(hours=7)))
+LEGACY_TRIAL_END = datetime(2026, 8, 15, 23, 59, 59, tzinfo=timezone(timedelta(hours=7)))
 
 
 class LicenseError(ValueError):
@@ -127,8 +129,9 @@ def evaluate(key: str | None, installed_at: datetime | None,
     """Đánh giá giấy phép (thuần logic — không đụng DB, dễ test).
 
     Ưu tiên: key gia hạn hợp lệ & còn hạn → ``valid``. Không có → xét dùng thử theo
-    ``installed_at`` (+TRIAL_DAYS) → ``trial``/``expired``. Vặn lùi đồng hồ quá dung
-    sai → ``clock_tampered``. Chưa cài & không key → ``missing``.
+    ``installed_at`` (+TRIAL_DAYS, riêng máy cài trước LEGACY_TRIAL_END thì rút về mốc
+    đó) → ``trial``/``expired``. Vặn lùi đồng hồ quá dung sai → ``clock_tampered``.
+    Chưa cài & không key → ``missing``.
     """
     now = now or datetime.now(timezone.utc)
     tampered = bool(max_seen_at and now < max_seen_at - CLOCK_TOLERANCE)
@@ -152,9 +155,11 @@ def evaluate(key: str | None, installed_at: datetime | None,
 
     # Không có key còn hạn → xét dùng thử theo mốc cài đặt.
     if installed_at:
-        # min(): mốc chung 15/8 rút ngắn cho trường cài muộn, nhưng KHÔNG kéo dài
-        # cho trường đã hết 90 ngày từ trước (AD-126).
-        trial_exp = min(installed_at + timedelta(days=TRIAL_DAYS), TRIAL_END)
+        trial_exp = installed_at + timedelta(days=TRIAL_DAYS)
+        if installed_at < LEGACY_TRIAL_END:
+            # Lứa máy cài trước mốc chốt cũ: giữ nguyên quyết định của AD-126. min()
+            # nên trường đã hết dùng thử từ trước KHÔNG được kéo dài tới mốc đó.
+            trial_exp = min(trial_exp, LEGACY_TRIAL_END)
         if now < trial_exp:
             return LicenseState("trial", expires_at=trial_exp)
         # Hết dùng thử: nếu từng có key (nay đã hết hạn) báo hạn của key cho rõ.

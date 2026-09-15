@@ -109,11 +109,11 @@ def test_evaluate_states():
 def test_evaluate_trial_from_install():
     # Dùng mốc CỐ ĐỊNH trong quá khứ gần để test không phụ thuộc ngày chạy.
     now = datetime(2026, 7, 20, tzinfo=timezone.utc)
-    # Vừa cài (không key) → dùng thử. AD-126: hạn là mốc chung 15/8, KHÔNG còn là
-    # "90 ngày kể từ ngày cài" nữa.
+    # Vừa cài (không key) → dùng thử. Máy này cài TRƯỚC mốc chốt cũ nên vẫn bị
+    # rút về 15/8 (AD-126); bản cài mới thì được trọn 90 ngày — xem cuối file.
     st = lic.evaluate(None, now, None, now=now)
     assert st.status == "trial" and st.ok is True
-    assert st.expires_at == lic.TRIAL_END
+    assert st.expires_at == lic.LEGACY_TRIAL_END
     # Cài đã quá 90 ngày, không key → hết hạn dùng thử.
     old = now - timedelta(days=91)
     assert lic.evaluate(None, old, None, now=now).status == "expired"
@@ -205,18 +205,19 @@ async def test_middleware_missing_vs_valid(client, monkeypatch, preserve_license
     assert r.status_code != 403
 
 
-# ── Hạn dùng thử CHUNG: mọi trường chỉ tới 15/8/2026 (AD-126) ────────────────
-# Quyết định thương mại của nhà cung cấp: rút hạn dùng thử về một mốc CỐ ĐỊNH thay
-# vì 90 ngày kể từ ngày cài. Key gia hạn đã mua thì KHÔNG bị ảnh hưởng.
+# ── Dùng thử: 90 ngày kể từ ngày cài, trừ lứa máy cài trước 15/8/2026 ────────
+# AD-126 từng chốt MỌI bản dùng thử ở 15/8/2026. Mốc đó nay chỉ còn áp cho những
+# máy đã cài TRƯỚC nó (trường đang khoá thì vẫn khoá, phải mua key); máy cài từ
+# 15/8 trở đi được trọn 90 ngày. Key gia hạn đã mua KHÔNG bị ảnh hưởng.
 
 def test_trial_capped_at_fixed_end_date():
-    """Trường cài giữa tháng 7: theo 90 ngày sẽ tới tận tháng 10 — nay chốt 15/8."""
-    from app.core.license import TRIAL_END
+    """Trường cài giữa tháng 7: theo 90 ngày sẽ tới tận tháng 10 — vẫn chốt 15/8."""
+    from app.core.license import LEGACY_TRIAL_END
 
     installed = datetime(2026, 7, 15, tzinfo=timezone.utc)
     st = lic.evaluate(None, installed, None, now=datetime(2026, 8, 10, tzinfo=timezone.utc))
     assert st.status == "trial"
-    assert st.expires_at == TRIAL_END, st.expires_at
+    assert st.expires_at == LEGACY_TRIAL_END, st.expires_at
 
     # Qua mốc → hết hạn, dù chưa đủ 90 ngày kể từ ngày cài.
     st = lic.evaluate(None, installed, None, now=datetime(2026, 8, 16, tzinfo=timezone.utc))
@@ -236,3 +237,31 @@ def test_paid_key_is_not_affected_by_the_trial_cap():
     st = lic.evaluate(key, datetime(2026, 7, 15, tzinfo=timezone.utc), None,
                       now=datetime(2026, 9, 1, tzinfo=timezone.utc))
     assert st.status == "valid", st
+
+
+def test_fresh_install_gets_a_full_90_day_trial():
+    """Cài mới SAU mốc chốt cũ → trọn 90 ngày, không bị mốc quá khứ khoá ngay."""
+    installed = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    st = lic.evaluate(None, installed, None, now=installed)
+    assert st.status == "trial", st
+    assert st.expires_at == installed + timedelta(days=lic.TRIAL_DAYS), st.expires_at
+    assert st.days_left is not None
+
+
+def test_fresh_install_survives_past_the_legacy_cutoff():
+    """Mốc 15/8 nằm trong quá khứ — máy cài mới KHÔNG được coi là hết hạn vì nó."""
+    installed = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    # 60 ngày sau khi cài, đã qua mốc cũ rất lâu → vẫn đang dùng thử.
+    st = lic.evaluate(None, installed, None, now=datetime(2026, 10, 31, tzinfo=timezone.utc))
+    assert st.status == "trial", st
+    # Quá 90 ngày thì mới hết.
+    st = lic.evaluate(None, installed, None, now=datetime(2026, 12, 15, tzinfo=timezone.utc))
+    assert st.status == "expired", st
+
+
+def test_install_exactly_at_the_cutoff_is_treated_as_new():
+    """Ranh giới: cài đúng lúc mốc cũ → tính là máy mới, được trọn 90 ngày."""
+    installed = lic.LEGACY_TRIAL_END
+    st = lic.evaluate(None, installed, None, now=installed + timedelta(days=30))
+    assert st.status == "trial", st
+    assert st.expires_at == installed + timedelta(days=lic.TRIAL_DAYS)
